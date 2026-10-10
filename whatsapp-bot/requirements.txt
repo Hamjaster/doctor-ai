@@ -1,3 +1,4 @@
 fastapi
 uvicorn[standard]
 httpx
+aiohttp  # agent/nearby_hospitals.py, shared with the video doctor

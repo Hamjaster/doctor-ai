@@ -1,17 +1,23 @@
 import base64
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
 import re
 import secrets
 import sqlite3
+import sys
 import time
+import wave
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agent"))
+from nearby_hospitals import _details, find_hospitals  # noqa: E402  shared with the video doctor
 
 WAHA_URL = os.getenv("WAHA_URL", "http://localhost:3001")  # host port in docker-compose.yml
 WAHA_API_KEY = os.environ["WAHA_API_KEY"]
@@ -28,6 +34,9 @@ OPENROUTER_FALLBACK_MODELS = [m for m in os.getenv(
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
+# Voice notes are answered with voice notes, spoken by Gemini text-to-speech (needs GOOGLE_API_KEY).
+TTS_MODEL = os.getenv("TTS_MODEL", "gemini-2.5-flash-preview-tts")
+TTS_VOICE = os.getenv("TTS_VOICE", "Charon")
 MODEL_TIMEOUT_SECONDS = 60  # replies normally take 5-25 s; past this the patient should hear back anyway
 VIDEO_CALL_URL = os.environ["VIDEO_CALL_URL"].rstrip("/")
 # Shared with the web app, which reads a chat's context when a patient opens their video link.
@@ -57,7 +66,22 @@ other. Answer voice notes in the language spoken, in Roman script (e.g. Roman Ur
 type to you in another script; never use Devanagari. Speak with the confidence of a trained doctor and don't add disclaimers like
 "I'm not a substitute for an in-person doctor". Never recommend specific medicines or doses and never
 prescribe tests; if they may need one, say a doctor or pharmacist will choose it. Urge emergency care right away (call 1122 in Pakistan) for
-red-flag symptoms such as chest pain, trouble breathing, heavy bleeding or thoughts of self-harm."""
+red-flag symptoms such as chest pain, trouble breathing, heavy bleeding or thoughts of self-harm, and ask them
+to share their location (attach, then Location) so you can send the nearest hospitals.
+Medicines they already have are different: when they send a photo of a medicine strip, box, bottle or a
+prescription, read each name and strength, give the generic name for Pakistani brands (Panadol is
+paracetamol, Brufen is ibuprofen), and explain in plain words what it is usually for, how to take it as the
+prescription or pack says, common side effects, and warnings that matter (pregnancy, children, kidney or
+liver problems, alcohol, drowsiness). Check it against other medicines in this chat, ask what else they
+take, and flag clashes and duplicates (two paracetamol brands, two painkillers). If a name is unreadable,
+say so and ask for a clearer photo; never guess. Explain only the medicines they show you: never suggest
+another medicine, a dose or what to take instead, even when one of theirs isn't safe for them. Say why it
+may not suit them and send them to a doctor or pharmacist to choose. Never change a doctor's prescription."""
+
+VOICE_REPLY = """This message is a voice note and your reply will be spoken aloud as a voice note. Reply in the
+language they spoke, written in that language's own script (Urdu in Urdu script, Pashto in Pashto script,
+English in English), never Devanagari. Write plain spoken sentences: no lists, asterisks, emojis or links,
+except {VIDEO_LINK} on its own line when you invite them to a video consult.""".format(VIDEO_LINK=VIDEO_LINK)
 
 log = logging.getLogger("uvicorn.error")
 app = FastAPI()
@@ -109,6 +133,13 @@ async def reply_to(msg):
                    (chat, name.strip()[:80]))
 
     text = content = msg.get("body") or ""
+    kind = None
+    location = msg.get("location") or {}
+    if location.get("latitude") and location.get("longitude"):
+        reply = await hospitals_near(float(location["latitude"]), float(location["longitude"]))
+        await send(chat, reply)
+        remember(chat, "[shared location]", reply)
+        return
     if msg.get("hasMedia"):
         media = msg.get("media") or {}
         mimetype = media.get("mimetype") or ""
@@ -130,14 +161,21 @@ async def reply_to(msg):
         return  # no text and nothing attached, e.g. a system notice
 
     history = db.execute("SELECT role, content FROM messages WHERE sender = ? ORDER BY id", (chat,))
+    by_voice = kind == "voice note" and bool(GOOGLE_API_KEY)
     messages = (
-        [{"role": "system", "content": INSTRUCTIONS}]
+        [{"role": "system", "content": INSTRUCTIONS + ("\n\n" + VOICE_REPLY if by_voice else "")}]
         + [{"role": r, "content": c} for r, c in history]
         + [{"role": "user", "content": content}]
     )
     reply = add_video_link(chat, whatsapp_format(await ask_model(messages)))
-    await send(chat, reply)
+    if by_voice:
+        await send_voice(chat, reply)
+    else:
+        await send(chat, reply)
+    remember(chat, text, reply)
 
+
+def remember(chat, text, reply):
     # Saved as a user/assistant pair only after a successful reply, so the window always starts on a user turn.
     db.executemany(
         "INSERT INTO messages (sender, role, content) VALUES (?, ?, ?)",
@@ -148,6 +186,19 @@ async def reply_to(msg):
         "(SELECT id FROM messages WHERE sender = ? ORDER BY id DESC LIMIT 10)",
         (chat, chat),
     )
+
+
+async def hospitals_near(lat, lng):
+    """The nearest hospitals to a shared WhatsApp location, with directions."""
+    found = (await find_hospitals(lat, lng, "shared location")).hospitals
+    if not found:
+        return ("I couldn't find hospitals near that location. If this is an emergency, call 1122 now.\n"
+                "Qareeb hospital nahi mila. Emergency hai to abhi 1122 call karein.")
+    lines = ["*Nearest hospitals / Qareeb tareen hospital:*"]
+    for i, h in enumerate(found, 1):
+        lines.append(f"{i}. *{h.name}*, {_details(h)}\n{h.directions_url}")
+    lines.append("Emergency? Call *1122* now. / Emergency hai to abhi *1122* call karein.")
+    return "\n\n".join(lines)
 
 
 async def ask_model(messages):
@@ -213,6 +264,47 @@ def whatsapp_format(text):
     text = re.sub(r"^#{1,6}\s+\**(.+?)\**\s*$", r"*\1*", text, flags=re.M)  # ## Heading -> *Heading*
     text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)  # **bold** -> *bold*
     return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1: \2", text)  # [text](url) -> text: url
+
+
+async def send_voice(chat, reply):
+    """Speak the reply as a voice note; links can't be spoken, so they follow as text. Falls back to text."""
+    links = re.findall(r"https?://\S+", reply)
+    spoken = re.sub(r"[*_~]", "", re.sub(r"https?://\S+", "", reply)).strip()
+    try:
+        audio = base64.b64encode(await speak(spoken)).decode()
+        await call("POST", f"{WAHA_URL}/api/sendVoice", headers={"X-Api-Key": WAHA_API_KEY},
+                   json={"session": "default", "chatId": chat, "convert": True,  # WAHA turns WAV into Ogg Opus
+                         "file": {"mimetype": "audio/wav", "filename": "reply.wav", "data": audio}})
+    except Exception:
+        log.exception("voice reply failed, sending text instead")
+        await send(chat, reply)
+        return
+    if links:
+        await send(chat, "\n".join(links))
+
+
+async def speak(text):
+    """Gemini text-to-speech: 24 kHz 16-bit mono PCM, wrapped as WAV."""
+    # The preview TTS model now and then returns a candidate with no audio; one retry usually gets it.
+    for attempt in range(2):
+        r = await call("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{TTS_MODEL}:generateContent",
+                       headers={"x-goog-api-key": GOOGLE_API_KEY}, timeout=MODEL_TIMEOUT_SECONDS,
+                       json={"contents": [{"parts": [{"text": f"Say warmly and calmly, like a kind doctor: {text}"}]}],
+                             "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {
+                                 "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": TTS_VOICE}}}}})
+        parts = (r.json().get("candidates") or [{}])[0].get("content", {}).get("parts") or [{}]
+        if "inlineData" in parts[0]:
+            break
+        if attempt:
+            raise RuntimeError(f"no audio from {TTS_MODEL}: {str(r.json())[:200]}")
+    pcm = base64.b64decode(parts[0]["inlineData"]["data"])
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(pcm)
+    return buf.getvalue()
 
 
 async def send(chat, text):

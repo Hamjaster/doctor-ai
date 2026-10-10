@@ -62,6 +62,9 @@ You need Python 3.9+ and Docker. Run everything from this folder.
 ## Notes
 
 - **Instructions:** the doctor's instructions are `INSTRUCTIONS` in `main.py`. Replies are converted to WhatsApp formatting before they're sent.
+- **Voice notes:** with `GOOGLE_API_KEY` set, a voice note is answered with a voice note in the same language (Gemini text-to-speech); links in it follow as text. Text messages get text. Without the key, voice notes get text replies.
+- **Medicines:** patients can send a photo of a medicine strip, box or prescription; the doctor names each medicine (generic and brand), says what it's for, its side effects and warnings, and checks it against what else they take.
+- **Nearest hospitals:** when a patient shares a location (attach → Location), the bot replies with the five nearest hospitals and directions, using `agent/nearby_hospitals.py` (Google Places with `GOOGLE_MAPS_API_KEY`, otherwise OpenStreetMap).
 - **Who gets replies:** only one-on-one chats. Groups, status updates and channels are ignored. Videos and documents get a "text, photos or voice notes only" reply.
 - **Private data:** `sessions/` holds the WhatsApp login and `bot.db` holds patients' conversations. Both are gitignored; keep them private.
 - **Self-check:** `python test_main.py` runs the whole flow offline, with no network or keys.
