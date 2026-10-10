@@ -85,7 +85,9 @@ function ConsultSession({
   // Freeze the brief at mount so typing elsewhere can't change it mid-call.
   const [brief] = useState(() => buildBrief(profile, intake));
   const session = useSession(tokenSource, {
-    agentName,
+    // Only pass agentName when it's set. livekit-client copies every key it's given, and an
+    // undefined agentName can't be encoded, so the token request fails before it's sent.
+    ...(agentName ? { agentName } : {}),
     participantName: profile.name,
     participantAttributes: { 'saathi.brief': brief, 'saathi.ref': intake.ref },
     agentConnectTimeoutMilliseconds: 25_000,
