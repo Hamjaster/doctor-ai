@@ -105,8 +105,8 @@ export function Statement() {
 
 const STEPS = [
   {
-    title: 'Write down what’s wrong',
-    body: 'Age, medicines, allergies and today’s problem. Two minutes, and doctor.ai reads it before you speak.',
+    title: 'Say who you are',
+    body: 'Your name, your number and one line about your health. Ten seconds, and doctor.ai reads it before it says hello.',
   },
   {
     title: 'Call doctor.ai on WhatsApp',
@@ -403,10 +403,10 @@ export function ShowOnVideo() {
                 doctor.ai looks, asks what it needs to, and tells you what it sees.
               </p>
               <Link
-                href="/dashboard"
+                href="/start?next=video"
                 className="group mt-6 inline-flex w-fit items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-gray-900"
               >
-                Start from your dashboard
+                Start a video consult
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
@@ -671,18 +671,18 @@ export function Closing() {
           <Reveal delay={0.5} className="mt-10 flex flex-wrap gap-3">
             <Magnetic>
               <Link
-                href="/dashboard"
+                href="/start?next=video"
                 className="group inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3.5 font-medium text-gray-900"
               >
-                Set up my health profile
+                Start a video consult
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </Magnetic>
             <Link
-              href="/consult"
+              href="/start?next=whatsapp"
               className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-6 py-3.5 font-medium text-white transition-colors hover:bg-white/10"
             >
-              Call on WhatsApp <ArrowUpRight className="size-4" />
+              Chat on WhatsApp <ArrowUpRight className="size-4" />
             </Link>
           </Reveal>
           <div className="mt-24 flex flex-col gap-6 border-t border-white/10 pt-8 text-sm text-gray-400 md:flex-row md:items-end md:justify-between">

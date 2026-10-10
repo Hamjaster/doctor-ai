@@ -1,19 +1,6 @@
-import type { Metadata } from 'next';
-import { Handoff } from '@/components/saathi/consult/handoff';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Call doctor.ai · doctor.ai' };
-
-// Read env at request time so the number can change without a rebuild.
-export const dynamic = 'force-dynamic';
-
+// The WhatsApp hand-off is part of /start now; keep old links working.
 export default function ConsultPage() {
-  return (
-    <Handoff
-      whatsappNumber={process.env.SAATHI_WHATSAPP_NUMBER?.trim() || null}
-      videoReady={
-        !!(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET)
-      }
-      isDev={process.env.NODE_ENV !== 'production'}
-    />
-  );
+  redirect('/start?next=whatsapp');
 }

@@ -46,26 +46,34 @@ export function firstName(name: string) {
 /**
  * The brief doctor.ai receives before a consult. The same text is pre-filled into the WhatsApp
  * message and sent to the video agent as the `saathi.brief` participant attribute, so both
- * channels start from identical notes.
+ * channels start from identical notes. Onboarding only asks for a name, a number and a one-line
+ * health background; today's concern is optional, and doctor.ai asks about it on the call.
  */
-export function buildBrief(profile: Profile, intake: Intake) {
-  const who =
-    profile.relation === 'self'
-      ? profile.name
-      : `${profile.name} (${RELATION_LABELS[profile.relation].replace('My ', 'my ')})`;
-  const lines = [
-    `doctor.ai consult ${intake.ref || ''}`.trim(),
-    `Patient: ${who}${profile.age ? `, ${profile.age}` : ''}${profile.sex ? `, ${profile.sex}` : ''}`,
-    `Concern: ${intake.concern.trim()}`,
-  ];
-  if (intake.areas.length) lines.push(`Where: ${intake.areas.join(', ')}`);
-  if (intake.since) lines.push(`Started: ${SINCE_LABELS[intake.since]}`);
-  if (intake.severity) lines.push(`Severity: ${intake.severity}/10`);
-  if (intake.redFlags.length) lines.push(`Red flags reported: ${intake.redFlags.join('; ')}`);
-  if (profile.conditions.trim()) lines.push(`Conditions: ${profile.conditions.trim()}`);
-  if (profile.medications.trim()) lines.push(`Medicines: ${profile.medications.trim()}`);
-  if (profile.allergies.trim()) lines.push(`Allergies: ${profile.allergies.trim()}`);
+export function buildBrief(profile: Profile, intake?: Intake) {
+  const lines = [`Patient: ${profile.name.trim()}${profile.age ? `, ${profile.age}` : ''}`];
+  if (profile.phone.trim()) lines.push(`WhatsApp: ${profile.phone.trim()}`);
+  const background = [profile.conditions, profile.medications, profile.allergies]
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .join('; ');
+  if (background) lines.push(`Health background: ${background}`);
+  if (intake?.concern.trim()) lines.push(`Concern: ${intake.concern.trim()}`);
+  if (intake?.areas.length) lines.push(`Where: ${intake.areas.join(', ')}`);
+  if (intake?.since) lines.push(`Started: ${SINCE_LABELS[intake.since]}`);
+  if (intake?.severity) lines.push(`Severity: ${intake.severity}/10`);
+  if (intake?.redFlags.length) lines.push(`Red flags reported: ${intake.redFlags.join('; ')}`);
   return lines.join('\n');
+}
+
+/** The first WhatsApp message, pre-filled so doctor.ai knows who it's talking to. */
+export function whatsappIntro(profile: Profile) {
+  const background = profile.conditions.trim();
+  return [
+    `Hi doctor.ai, I'm ${firstName(profile.name)}.`,
+    background ? `Health background: ${background}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /** Digits only, the form wa.me links expect (country code, no plus). */

@@ -83,8 +83,8 @@ async def entrypoint(ctx: JobContext) -> None:
     instructions = INSTRUCTIONS
     if brief:
         instructions += (
-            "\n\nThe patient filled in these notes before the call. Use them, confirm the main"
-            " concern briefly, and don't ask for details they already gave:\n" + brief
+            "\n\nThe patient filled in these notes before the call. Use them, and don't ask for"
+            " details they already gave. Take their health background into account:\n" + brief
         )
 
     session = AgentSession(
@@ -99,8 +99,8 @@ async def entrypoint(ctx: JobContext) -> None:
     await session.generate_reply(
         instructions=(
             "Greet the patient by name, say you are doctor.ai, an AI doctor and not a "
-            "substitute for an in-person doctor, then briefly confirm the concern from "
-            "their notes."
+            "substitute for an in-person doctor. If their notes include a concern, briefly "
+            "confirm it; otherwise ask what brings them in today. Keep it to two sentences."
             if brief
             else "Greet the patient warmly, say you are doctor.ai, an AI doctor and not a "
             "substitute for an in-person doctor, then ask what brings them in today."

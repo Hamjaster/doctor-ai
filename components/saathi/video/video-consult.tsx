@@ -10,10 +10,12 @@ import {
   ArrowUp,
   Camera,
   CameraOff,
+  Keyboard,
   Mic,
   MicOff,
   PhoneOff,
   SwitchCamera,
+  X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
@@ -29,12 +31,19 @@ import {
   useTrackToggle,
   useTrackVolume,
 } from '@livekit/components-react';
-import { AmbientBg, AnimatedText, EASE_OUT, PageSkeleton } from '@/components/saathi/motion';
+import { AnimatedText, EASE_OUT, PageSkeleton } from '@/components/saathi/motion';
 import type { AvatarDrive, AvatarMood } from '@/components/saathi/three/types';
 import { Wordmark } from '@/components/saathi/wordmark';
 import { buildBrief, firstName } from '@/lib/brief';
 import { cn } from '@/lib/cn';
-import { type Intake, type Profile, actions, useHydrated, useSaathi } from '@/lib/saathi-store';
+import {
+  type Intake,
+  type Profile,
+  actions,
+  emptyIntake,
+  useHydrated,
+  useSaathi,
+} from '@/lib/saathi-store';
 
 const AvatarStage = dynamic(() => import('@/components/saathi/three/avatar-stage'), {
   ssr: false,
@@ -45,27 +54,34 @@ export function VideoConsult({ agentName }: { agentName?: string }) {
   const hydrated = useHydrated();
   const state = useSaathi();
   const profile = state.profiles.find((p) => p.id === state.activeId) ?? state.profiles[0];
-  const intake = profile ? state.intakes[profile.id] : undefined;
+  const stored = profile ? state.intakes[profile.id] : undefined;
+
+  // Every consult needs a token; onboarding creates one, but older profiles may not have it.
+  useEffect(() => {
+    if (profile && !stored?.ref) actions.ensureRef(profile.id);
+  }, [profile, stored?.ref]);
 
   if (!hydrated) return <PageSkeleton />;
 
-  if (!profile || !intake || intake.concern.trim().length < 3) {
+  // Only the patient's details are needed; doctor.ai asks about today's problem on the call.
+  const intake = stored ?? emptyIntake();
+  if (!profile) {
     return (
       <div className="grid min-h-svh place-items-center bg-white px-6 text-center">
         <div>
           <AnimatedText
             as="h1"
-            text="Start with your notes."
+            text="First, tell us who you are."
             className="font-display tracking-display text-4xl text-gray-900 md:text-5xl"
           />
           <p className="mt-3 text-gray-600">
-            doctor.ai reads them before the video consult begins.
+            Your name, number and one line about your health. It takes ten seconds.
           </p>
           <Link
-            href="/dashboard"
+            href="/start?next=video"
             className="bg-brand mt-8 inline-flex rounded-lg px-6 py-3.5 font-medium text-white"
           >
-            Go to my dashboard
+            Add my details
           </Link>
         </div>
       </div>
@@ -189,7 +205,7 @@ function Lobby({
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5 md:px-12">
         <Wordmark />
         <Link
-          href="/consult"
+          href="/start?next=whatsapp"
           className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900"
         >
           <ArrowLeft className="size-4" /> Back
@@ -278,14 +294,19 @@ const glass = 'bg-white/[0.06] ring-1 ring-white/10 backdrop-blur-xl';
 
 function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; onEnd: () => void }) {
   const session = useSessionContext();
-  // One subscription for the whole call: the captions and the transcript both read it.
   const chat = useSessionMessages(session);
+  const agent = useAgent();
+  const volume = useTrackVolume(agent.microphoneTrack);
   const cameraRef = session.local.cameraTrack;
   const cam = useTrackToggle({ source: Track.Source.Camera });
   const mic = useTrackToggle({ source: Track.Source.Microphone });
   const micLevel = useTrackVolume(session.local.microphoneTrack);
   const [facing, setFacing] = useState<'user' | 'environment'>('user');
+  // The doctor fills the screen; tap your camera tile to swap when showing something up close.
+  const [showingMe, setShowingMe] = useState(false);
+  const [typing, setTyping] = useState(false);
   const cameraOn = cam.enabled && !!cameraRef && !cameraRef.publication?.isMuted;
+  const meBig = showingMe && cameraOn;
 
   const flip = async () => {
     const track = cameraRef?.publication?.track;
@@ -294,162 +315,374 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
     try {
       await track.restartTrack({ facingMode: next });
       setFacing(next);
+      if (next === 'environment') setShowingMe(true);
     } catch {
       // Devices with one camera reject the switch; nothing to do.
     }
   };
 
-  return (
-    <div className="bg-brand relative isolate flex h-svh flex-col overflow-hidden text-white">
-      <AmbientBg className="-z-10" />
+  const me = cameraOn && cameraRef && (
+    <VideoTrack
+      trackRef={cameraRef}
+      className={cn('h-full w-full object-cover', facing === 'user' && '-scale-x-100')}
+    />
+  );
 
-      <header className="flex shrink-0 items-center justify-between gap-4 px-4 py-3 sm:px-5 lg:px-6 lg:py-4">
+  return (
+    <div className="relative isolate h-svh overflow-hidden bg-[#141a19] text-white">
+      {/* Main stage: the doctor, or your camera when you're showing it something. */}
+      <div className="absolute inset-0">
+        {meBig ? (
+          <div className="relative h-full w-full">
+            {me}
+            <Viewfinder scanning />
+          </div>
+        ) : (
+          <DoctorStage volume={volume} state={agent.state} joining={!agent.isConnected} />
+        )}
+      </div>
+
+      {/* Scrims keep text legible on any video. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/50 to-transparent"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%] bg-gradient-to-t from-black/75 via-black/30 to-transparent"
+      />
+
+      <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <span className="font-display tracking-display-sm text-2xl leading-none font-bold">
             doctor<span className="text-white/55">.ai</span>
           </span>
           <LiveBadge />
         </div>
-        <p className="flex items-center gap-3 text-xs text-white/55">
-          <span className="hidden sm:inline">An AI, not a doctor who can examine you</span>
-          {intake.ref && (
-            <span className={cn(glass, 'rounded-full px-3 py-1.5 text-white/80 tabular-nums')}>
-              {intake.ref}
-            </span>
-          )}
-        </p>
+        <span
+          className={cn(glass, 'hidden rounded-full px-3 py-1.5 text-xs text-white/70 sm:inline')}
+        >
+          An AI, not a doctor who can examine you
+          {intake.ref && <span className="ml-2 text-white/45 tabular-nums">{intake.ref}</span>}
+        </span>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 sm:px-4 sm:pb-4 lg:grid lg:grid-cols-[1fr_400px] lg:gap-4 lg:px-5 lg:pb-5">
-        {/* What doctor.ai sees */}
-        <motion.section
-          aria-label="Your camera"
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.7, ease: EASE_OUT }}
-          className="relative min-h-0 flex-1 overflow-hidden rounded-[28px] bg-[#1c2322] shadow-[0_40px_80px_-40px_rgb(0_0_0/0.7)] ring-1 ring-white/10"
-        >
-          {cameraOn && cameraRef ? (
-            <VideoTrack
-              trackRef={cameraRef}
-              className={cn('h-full w-full object-cover', facing === 'user' && '-scale-x-100')}
-            />
-          ) : (
-            <div className="grid h-full place-items-center p-8 pb-24 text-center sm:pb-8">
-              <div>
-                <span
-                  className={cn(
-                    glass,
-                    'mx-auto grid size-12 place-items-center rounded-full sm:size-16'
-                  )}
-                >
-                  <CameraOff className="size-6 text-white/70" />
-                </span>
-                <p className="font-display tracking-display-sm mt-4 text-xl sm:mt-5 sm:text-2xl">
-                  Your camera is off.
-                </p>
-                <p className="mt-1.5 text-sm text-white/55">
-                  Turn it on to show doctor.ai the problem.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => cam.toggle()}
-                  disabled={cam.pending}
-                  className="mt-6 hidden items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-medium text-gray-900 transition-transform hover:-translate-y-0.5 disabled:opacity-60 sm:inline-flex"
-                >
-                  <Camera className="size-4" /> Turn camera on
-                </button>
-              </div>
-            </div>
-          )}
+      {/* Your camera, picture-in-picture. Tap to swap with the main view. */}
+      <motion.button
+        type="button"
+        onClick={() => cameraOn && setShowingMe((v) => !v)}
+        aria-label={meBig ? 'Show doctor.ai full screen' : 'Show your camera full screen'}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.2 }}
+        className="absolute top-20 right-4 z-10 aspect-[3/4] w-28 overflow-hidden rounded-2xl bg-[#1c2322] shadow-2xl ring-1 ring-white/15 sm:right-6 sm:w-40 lg:w-48"
+      >
+        {meBig ? (
+          <DoctorStage volume={volume} state={agent.state} joining={!agent.isConnected} compact />
+        ) : cameraOn ? (
+          me
+        ) : (
+          <span className="grid h-full place-items-center">
+            <CameraOff className="size-6 text-white/50" />
+          </span>
+        )}
+        <span className="absolute bottom-2 left-2 rounded-full bg-black/45 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">
+          {meBig ? 'doctor.ai' : firstName(profile.name) || 'You'}
+        </span>
+      </motion.button>
 
-          {/* Scrims keep the overlays legible on bright video. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/45 to-transparent"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/65 to-transparent"
-          />
-          <Viewfinder scanning={cameraOn} />
+      <SourcesCard messages={chat.messages} />
 
-          <p
-            className={cn(
-              glass,
-              'absolute top-4 left-4 inline-flex items-center gap-2 rounded-full bg-black/30 px-3 py-1.5 text-xs font-medium'
-            )}
-          >
-            <span className="bg-wa size-1.5 rounded-full" />
-            What doctor.ai sees
-            {facing === 'environment' && <span className="text-white/55">· Back camera</span>}
-          </p>
+      {/* Bottom: who's talking, what doctor.ai is saying right now, and the controls. */}
+      <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 px-4 pb-6 sm:pb-8">
+        <AgentStatus state={agent.state} volume={volume} joining={!agent.isConnected} />
+        <LiveWords messages={chat.messages} speaking={agent.state === 'speaking'} />
 
-          <Captions messages={chat.messages} />
+        <AnimatePresence>
+          {typing && <TypeBox chat={chat} onClose={() => setTyping(false)} />}
+        </AnimatePresence>
 
-          {/* Controls dock */}
-          <div className="absolute inset-x-0 bottom-4 flex justify-center px-4 sm:bottom-5">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.3 }}
-              className={cn(
-                glass,
-                'flex items-center gap-1.5 rounded-full bg-black/35 p-1.5 sm:gap-2 sm:p-2'
-              )}
-            >
-              <ControlButton
-                label={mic.enabled ? 'Mute microphone' : 'Unmute microphone'}
-                active={mic.enabled}
-                pending={mic.pending}
-                level={mic.enabled ? micLevel : 0}
-                onClick={() => mic.toggle()}
-              >
-                {mic.enabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
-              </ControlButton>
-              <ControlButton
-                label={cam.enabled ? 'Turn camera off' : 'Turn camera on'}
-                active={cam.enabled}
-                pending={cam.pending}
-                onClick={() => cam.toggle()}
-              >
-                {cam.enabled ? <Camera className="size-5" /> : <CameraOff className="size-5" />}
-              </ControlButton>
-              <ControlButton label="Switch camera" active onClick={flip} disabled={!cameraOn}>
-                <SwitchCamera className="size-5" />
-              </ControlButton>
-              <span aria-hidden className="mx-1 h-7 w-px bg-white/15" />
-              <button
-                type="button"
-                onClick={onEnd}
-                className="bg-danger inline-flex h-11 items-center gap-2 rounded-full px-4 font-medium text-white shadow-[0_10px_30px_-10px_rgb(194_65_45/0.8)] transition-[transform,filter] hover:-translate-y-0.5 hover:brightness-110 sm:h-12 sm:px-5"
-              >
-                <PhoneOff className="size-5" /> End
-              </button>
-            </motion.div>
-          </div>
-        </motion.section>
-
-        {/* doctor.ai + transcript */}
-        <motion.aside
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.15 }}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.3 }}
           className={cn(
             glass,
-            'flex max-h-[44svh] min-h-0 flex-col overflow-hidden rounded-[28px] lg:max-h-none'
+            'flex items-center gap-1.5 rounded-full bg-black/40 p-1.5 sm:gap-2 sm:p-2'
           )}
         >
-          <Presence />
-          <Transcript patientName={firstName(profile.name)} chat={chat} />
-        </motion.aside>
+          <ControlButton
+            label={mic.enabled ? 'Mute microphone' : 'Unmute microphone'}
+            active={mic.enabled}
+            pending={mic.pending}
+            level={mic.enabled ? micLevel : 0}
+            onClick={() => mic.toggle()}
+          >
+            {mic.enabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
+          </ControlButton>
+          <ControlButton
+            label={cam.enabled ? 'Turn camera off' : 'Turn camera on'}
+            active={cam.enabled}
+            pending={cam.pending}
+            onClick={() => cam.toggle()}
+          >
+            {cam.enabled ? <Camera className="size-5" /> : <CameraOff className="size-5" />}
+          </ControlButton>
+          <ControlButton label="Switch camera" active onClick={flip} disabled={!cameraOn}>
+            <SwitchCamera className="size-5" />
+          </ControlButton>
+          <ControlButton
+            label={typing ? 'Close keyboard' : 'Type a message'}
+            active={!typing}
+            onClick={() => setTyping((v) => !v)}
+          >
+            <Keyboard className="size-5" />
+          </ControlButton>
+          <span aria-hidden className="mx-1 h-7 w-px bg-white/15" />
+          <button
+            type="button"
+            onClick={onEnd}
+            aria-label="End"
+            className="bg-danger grid size-11 place-items-center rounded-full text-white shadow-[0_10px_30px_-10px_rgb(194_65_45/0.8)] transition-[transform,filter] hover:-translate-y-0.5 hover:brightness-110 sm:size-12"
+          >
+            <PhoneOff className="size-5" />
+          </button>
+        </motion.div>
       </div>
 
       <StartAudio
         label="Tap to hear doctor.ai"
-        className="fixed inset-x-0 bottom-28 z-20 mx-auto w-fit rounded-full bg-white px-5 py-3 font-medium text-gray-900 shadow-2xl shadow-black/40"
+        className="fixed inset-x-0 top-1/2 z-20 mx-auto w-fit rounded-full bg-white px-5 py-3 font-medium text-gray-900 shadow-2xl shadow-black/40"
       />
     </div>
+  );
+}
+
+const AGENT_MOOD: Record<string, AvatarMood> = {
+  listening: 'listening',
+  thinking: 'thinking',
+  speaking: 'speaking',
+};
+
+/** doctor.ai on the main stage: the rigged avatar, with a halo that breathes with its voice. */
+function DoctorStage({
+  volume,
+  state,
+  joining,
+  compact = false,
+}: {
+  volume: number;
+  state: string;
+  joining: boolean;
+  compact?: boolean;
+}) {
+  const drive = useRef<AvatarDrive>({ level: 0, mood: 'idle' });
+  useEffect(() => {
+    drive.current.mood = AGENT_MOOD[state] ?? 'idle';
+  }, [state]);
+  useEffect(() => {
+    drive.current.level = volume;
+  }, [volume]);
+  useEffect(() => {
+    if (!joining) drive.current.waveAt = performance.now();
+  }, [joining]);
+  const v = Math.min(volume, 1);
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(ellipse_at_50%_35%,#3a4746_0%,#1c2322_55%,#141a19_100%)]">
+      <div
+        aria-hidden
+        className="absolute inset-0 transition-[transform,opacity] duration-150"
+        style={{ transform: `scale(${1 + v * 0.18})`, opacity: 0.5 + v * 0.5 }}
+      >
+        <div className="absolute top-[12%] left-1/2 aspect-square w-[min(70vw,560px)] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(122_158_150/0.5),transparent)]" />
+      </div>
+      <AvatarStage
+        drive={drive}
+        framing={compact ? 'call' : 'hero'}
+        className={cn('absolute inset-0', !compact && 'lg:inset-x-[18%]')}
+      />
+    </div>
+  );
+}
+
+/** One line: what doctor.ai is doing right now. */
+function AgentStatus({
+  state,
+  volume,
+  joining,
+}: {
+  state: string;
+  volume: number;
+  joining: boolean;
+}) {
+  return (
+    <p
+      className={cn(
+        glass,
+        'inline-flex items-center gap-2 rounded-full bg-black/30 px-3.5 py-1.5 text-sm text-white/80',
+        joining && 'animate-pulse'
+      )}
+    >
+      <StateGlyph state={state} level={volume} />
+      {STATE_LABEL[state] ?? state}
+    </p>
+  );
+}
+
+/** The end of a long line, so live words stay at most a few lines tall. */
+function captionTail(text: string, max = 180) {
+  const plain = text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .trim();
+  if (plain.length <= max) return plain;
+  const cut = plain.slice(-max);
+  return `…${cut.slice(cut.indexOf(' ') + 1)}`;
+}
+
+/**
+ * Only what doctor.ai is saying, as it says it. No history: the words appear while it speaks
+ * and fade a moment after it stops, like subtitles on a live call.
+ */
+function LiveWords({ messages, speaking }: { messages: ReceivedMessage[]; speaking: boolean }) {
+  const reduce = useReducedMotion();
+  const last = messages.findLast((m) => m.type === 'agentTranscript');
+  const [linger, setLinger] = useState(false);
+
+  useEffect(() => {
+    if (speaking) {
+      setLinger(true);
+      return;
+    }
+    const t = setTimeout(() => setLinger(false), 2200);
+    return () => clearTimeout(t);
+  }, [speaking]);
+
+  const text = last ? captionTail(last.message) : '';
+  const show = (speaking || linger) && !!text;
+
+  return (
+    <div
+      aria-live="polite"
+      className="flex min-h-[6.5rem] w-full max-w-3xl items-end justify-center"
+    >
+      <AnimatePresence mode="wait">
+        {show && last && (
+          <motion.p
+            key={last.id}
+            initial={reduce ? false : { opacity: 0, y: 12, filter: 'blur(8px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={reduce ? undefined : { opacity: 0, y: -8, filter: 'blur(8px)' }}
+            transition={{ duration: 0.4, ease: EASE_OUT }}
+            className="font-display text-center text-2xl leading-snug text-white [text-shadow:0_2px_24px_rgb(0_0_0/0.7)] md:text-[2rem]"
+          >
+            {text}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Sources doctor.ai looked up, shown briefly as a card instead of in a chat log. */
+function SourcesCard({ messages }: { messages: ReceivedMessage[] }) {
+  const latest = messages.findLast(
+    (m) => m.type === 'chatMessage' && !m.from?.isLocal && /\]\(https?:\/\//.test(m.message)
+  );
+  const [hidden, setHidden] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!latest) return;
+    const t = setTimeout(() => setHidden(latest.id), 30_000);
+    return () => clearTimeout(t);
+  }, [latest]);
+
+  const show = !!latest && hidden !== latest.id;
+  return (
+    <AnimatePresence>
+      {show && latest && (
+        <motion.aside
+          key={latest.id}
+          initial={{ opacity: 0, x: -24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.45, ease: EASE_OUT }}
+          className={cn(
+            glass,
+            'absolute top-20 left-4 z-10 max-w-[min(22rem,calc(100vw-10rem))] rounded-2xl bg-black/40 p-4 text-sm leading-relaxed sm:left-6'
+          )}
+        >
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <span className="text-xs font-medium tracking-wide text-white/55 uppercase">
+              Sources
+            </span>
+            <button
+              type="button"
+              onClick={() => setHidden(latest.id)}
+              aria-label="Hide sources"
+              className="text-white/50 hover:text-white"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <AgentText text={latest.message.replace(/^\*\*[^*]+\*\*\s*/, '')} />
+        </motion.aside>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** Optional typing, for when speaking isn't possible. Messages aren't kept on screen. */
+function TypeBox({
+  chat,
+  onClose,
+}: {
+  chat: ReturnType<typeof useSessionMessages>;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+  return (
+    <motion.form
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 10 }}
+      transition={{ duration: 0.3, ease: EASE_OUT }}
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const text = draft.trim();
+        if (!text) return;
+        setDraft('');
+        await chat.send(text);
+        onClose();
+      }}
+      className={cn(
+        glass,
+        'flex w-full max-w-md items-center gap-2 rounded-full bg-black/40 p-1.5 pl-4'
+      )}
+    >
+      <label htmlFor="typed-message" className="sr-only">
+        Type a message to doctor.ai
+      </label>
+      <input
+        id="typed-message"
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && onClose()}
+        placeholder="Type instead of speaking"
+        className="h-9 min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
+      />
+      <motion.button
+        type="submit"
+        aria-label="Send message"
+        disabled={!draft.trim() || chat.isSending}
+        whileTap={{ scale: 0.9 }}
+        className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-gray-900 transition-opacity disabled:opacity-30"
+      >
+        <ArrowUp className="size-4" />
+      </motion.button>
+    </motion.form>
   );
 }
 
@@ -545,109 +778,6 @@ function Viewfinder({ scanning }: { scanning: boolean }) {
   );
 }
 
-/** The end of a long line, so live captions stay at most a few lines tall. */
-function captionTail(text: string, max = 150) {
-  const plain = text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .trim();
-  if (plain.length <= max) return plain;
-  const cut = plain.slice(-max);
-  return `…${cut.slice(cut.indexOf(' ') + 1)}`;
-}
-
-/** Subtitles over the video while doctor.ai speaks, in the hero's caption style. */
-function Captions({ messages }: { messages: ReceivedMessage[] }) {
-  const agent = useAgent();
-  const reduce = useReducedMotion();
-  const last = messages.findLast((m) => m.type === 'agentTranscript');
-  const show = agent.state === 'speaking' && !!last?.message.trim();
-
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center px-6 sm:bottom-28"
-    >
-      <AnimatePresence mode="wait">
-        {show && last && (
-          <motion.p
-            key={last.id}
-            initial={reduce ? false : { opacity: 0, y: 10, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            exit={reduce ? undefined : { opacity: 0, y: -8, filter: 'blur(6px)' }}
-            transition={{ duration: 0.45, ease: EASE_OUT }}
-            className="font-display max-w-2xl text-center text-xl leading-snug text-white [text-shadow:0_2px_18px_rgb(0_0_0/0.6)] md:text-2xl"
-          >
-            {captionTail(last.message)}
-          </motion.p>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-const AGENT_MOOD: Record<string, AvatarMood> = {
-  listening: 'listening',
-  thinking: 'thinking',
-  speaking: 'speaking',
-};
-
-/** doctor.ai's face for the call: the rigged avatar, driven by the agent's state and voice. */
-function Presence() {
-  const agent = useAgent();
-  const volume = useTrackVolume(agent.microphoneTrack);
-  const drive = useRef<AvatarDrive>({ level: 0, mood: 'idle' });
-  const label = STATE_LABEL[agent.state] ?? agent.state;
-  const joining = !agent.isConnected;
-
-  useEffect(() => {
-    drive.current.mood = AGENT_MOOD[agent.state] ?? 'idle';
-  }, [agent.state]);
-  useEffect(() => {
-    drive.current.level = volume;
-  }, [volume]);
-  // Wave hello once doctor.ai has joined.
-  useEffect(() => {
-    if (!joining) drive.current.waveAt = performance.now();
-  }, [joining]);
-
-  return (
-    <div className="flex items-center gap-4 border-b border-white/10 p-3 lg:flex-col lg:items-stretch lg:p-4">
-      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-b from-white/[0.08] to-white/0 ring-1 ring-white/10 lg:h-64 lg:w-full lg:rounded-[22px]">
-        {/* Halo that breathes with doctor.ai's voice */}
-        <div
-          aria-hidden
-          className="absolute inset-0 transition-[transform,opacity] duration-150"
-          style={{
-            transform: `scale(${1 + Math.min(volume, 1) * 0.25})`,
-            opacity: 0.55 + Math.min(volume, 1) * 0.45,
-          }}
-        >
-          <div className="absolute inset-x-[10%] top-[8%] aspect-square rounded-full bg-[radial-gradient(closest-side,rgb(122_158_150/0.45),transparent)]" />
-        </div>
-        <AvatarStage drive={drive} framing="call" className="absolute inset-0" />
-        <span className="absolute bottom-3 left-3 hidden rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-medium text-white/80 backdrop-blur lg:inline">
-          AI doctor
-        </span>
-      </div>
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:px-1 lg:pt-1">
-        <div className="min-w-0">
-          <p className="font-display tracking-display-sm text-2xl leading-none">doctor.ai</p>
-          <p
-            className={cn(
-              'mt-2 flex items-center gap-2 text-sm text-white/65',
-              joining && 'animate-pulse'
-            )}
-          >
-            <StateGlyph state={agent.state} level={volume} />
-            {label}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** A small live sign for what doctor.ai is doing: bars when speaking, dots when thinking. */
 function StateGlyph({ state, level }: { state: string; level: number }) {
   const reduce = useReducedMotion();
@@ -718,132 +848,6 @@ function AgentText({ text }: { text: string }) {
   return <span className="whitespace-pre-line text-white">{parts}</span>;
 }
 
-function Transcript({
-  patientName,
-  chat,
-}: {
-  patientName: string;
-  chat: ReturnType<typeof useSessionMessages>;
-}) {
-  const { messages, send, isSending } = chat;
-  const agent = useAgent();
-  const [draft, setDraft] = useState('');
-  const endRef = useRef<HTMLDivElement>(null);
-  const thinking = agent.state === 'thinking';
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [messages, thinking]);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-5"
-        aria-live="polite"
-        data-lenis-prevent
-      >
-        {messages.length === 0 ? (
-          <div className="flex h-full min-h-24 flex-col items-center justify-center text-center">
-            <p className="font-display tracking-display-sm text-lg text-white/80">
-              Just talk, like on a phone call.
-            </p>
-            <p className="mt-1 text-sm text-white/45">
-              Captions appear here as you and doctor.ai talk.
-            </p>
-          </div>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            <AnimatePresence initial={false}>
-              {messages.map((m, i) => {
-                const mine = m.from?.isLocal === true;
-                const prev = messages[i - 1];
-                const first = !prev || (prev.from?.isLocal === true) !== mine;
-                return (
-                  <motion.li
-                    key={m.id}
-                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.35, ease: EASE_OUT }}
-                    className={cn(
-                      'flex flex-col',
-                      mine ? 'items-end' : 'items-start',
-                      first && 'mt-3 first:mt-0'
-                    )}
-                  >
-                    {first && (
-                      <span className="mb-1.5 px-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">
-                        {mine ? patientName : 'doctor.ai'}
-                      </span>
-                    )}
-                    <div
-                      className={cn(
-                        'max-w-[88%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed',
-                        mine
-                          ? 'rounded-tr-md bg-white text-gray-900'
-                          : 'rounded-tl-md bg-white/[0.08] ring-1 ring-white/[0.06]',
-                        !first && (mine ? 'rounded-tr-2xl' : 'rounded-tl-2xl')
-                      )}
-                    >
-                      {mine ? <span>{m.message}</span> : <AgentText text={m.message} />}
-                    </div>
-                  </motion.li>
-                );
-              })}
-              {thinking && (
-                <motion.li
-                  key="thinking"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-1.5 flex"
-                  aria-label="doctor.ai is thinking"
-                >
-                  <span className="flex items-center rounded-2xl rounded-tl-md bg-white/[0.08] px-4 py-3.5 ring-1 ring-white/[0.06]">
-                    <StateGlyph state="thinking" level={0} />
-                  </span>
-                </motion.li>
-              )}
-            </AnimatePresence>
-          </ul>
-        )}
-        <div ref={endRef} />
-      </div>
-      <form
-        className="p-3"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          const text = draft.trim();
-          if (!text) return;
-          setDraft('');
-          await send(text);
-        }}
-      >
-        <div className="flex items-center gap-2 rounded-full bg-white/[0.07] p-1.5 pl-4 ring-1 ring-white/10 transition-shadow focus-within:ring-white/30">
-          <label htmlFor="typed-message" className="sr-only">
-            Type a message to doctor.ai
-          </label>
-          <input
-            id="typed-message"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Type instead of speaking"
-            className="h-9 min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none"
-          />
-          <motion.button
-            type="submit"
-            aria-label="Send message"
-            disabled={!draft.trim() || isSending}
-            whileTap={{ scale: 0.9 }}
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-gray-900 transition-opacity disabled:opacity-30"
-          >
-            <ArrowUp className="size-4" />
-          </motion.button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 /* ───────────────────────── Ended ───────────────────────── */
 
 function Ended({ profile, intake }: { profile: Profile; intake: Intake }) {
@@ -865,14 +869,14 @@ function Ended({ profile, intake }: { profile: Profile; intake: Intake }) {
             type="button"
             onClick={() => {
               actions.closeIntake(profile.id);
-              router.push('/dashboard');
+              router.push('/');
             }}
             className="bg-brand w-full rounded-lg px-6 py-3.5 font-medium text-white sm:w-auto"
           >
-            Done, back to my dashboard
+            Done
           </button>
           <Link
-            href="/consult"
+            href="/start?next=whatsapp"
             className="text-sm text-gray-500 underline-offset-4 hover:underline"
           >
             Continue on WhatsApp instead

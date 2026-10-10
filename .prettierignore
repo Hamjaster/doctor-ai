@@ -11,3 +11,5 @@ pnpm-lock.yaml
 motion/
 # Local Python environments (agent/, whatsapp-bot/)
 **/.venv/
+# WAHA runtime data (whatsapp-bot/)
+whatsapp-bot/sessions/

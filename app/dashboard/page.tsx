@@ -1,8 +1,6 @@
-import type { Metadata } from 'next';
-import { Dashboard } from '@/components/saathi/dashboard/dashboard';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Your dashboard · doctor.ai' };
-
+// Onboarding now lives on /start; keep old links working.
 export default function DashboardPage() {
-  return <Dashboard />;
+  redirect('/start');
 }

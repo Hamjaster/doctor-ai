@@ -52,14 +52,14 @@ export function SiteNav() {
         </div>
         <div className="hidden items-center gap-3 md:flex">
           <Link
-            href="/dashboard"
+            href="/start"
             className="px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:text-gray-900"
           >
-            Dashboard
+            My details
           </Link>
           <Magnetic>
             <Link
-              href="/dashboard"
+              href="/start"
               className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-gray-900"
             >
               Start a consult
@@ -97,7 +97,7 @@ export function SiteNav() {
                 </a>
               ))}
               <Link
-                href="/dashboard"
+                href="/start"
                 className="mt-2 rounded-lg bg-gray-800 px-4 py-3 text-center font-medium text-white"
               >
                 Start a consult
