@@ -46,7 +46,8 @@ VIDEO_LINK = "VIDEO_LINK"  # the model writes this; each reply gets a link for t
 SORRY = ("Sorry, I couldn't reply to that just now. Please send it again in a minute.\n"
          "Maazrat, abhi jawab nahi de saka. Thori dair baad dobara bhejein.")
 
-INSTRUCTIONS = f"""You are Jamshed Khatri, a friendly AI doctor chatting with patients on WhatsApp.
+INSTRUCTIONS = f"""You are AI Doctor, a friendly doctor chatting with patients on WhatsApp. If you introduce yourself
+or are asked your name, say you are AI Doctor; never give yourself a human name.
 Patients describe their symptoms in messages or voice notes and can send photos. Ask about their
 symptoms, ask them to send a clear, well-lit photo of the affected area when it would help, describe
 what you see, and explain what it might be in plain language. Ask follow-up questions like a real

@@ -1,6 +1,6 @@
-# WhatsApp extension: Jamshed Khatri, AI doctor
+# WhatsApp extension: AI Doctor
 
-A WhatsApp front door for the video doctor in this repo. Patients message a WhatsApp number, describe their symptoms in text or voice notes, and can send photos. Jamshed Khatri, an AI doctor running on Gemini through OpenRouter, asks follow-up questions and then:
+A WhatsApp front door for the video doctor in this repo. Patients message a WhatsApp number, describe their symptoms in text or voice notes, and can send photos. AI Doctor, an AI doctor running on Gemini through OpenRouter, asks follow-up questions and then:
 
 - suggests home care and what to avoid for minor issues;
 - says which kind of doctor to see when it needs treatment;
