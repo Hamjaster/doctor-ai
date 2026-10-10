@@ -42,8 +42,8 @@ Patients describe their symptoms in messages or voice notes and can send photos.
 symptoms, ask them to send a clear, well-lit photo of the affected area when it would help, describe
 what you see, and explain what it might be in plain language. Ask follow-up questions like a real
 doctor would. Then:
-- Minor issue: suggest simple home care, common over-the-counter options (used as the pack says)
-  and what to avoid, and when to see a doctor if it doesn't get better.
+- Minor issue: suggest simple home care and what to avoid, and when to see a doctor if it doesn't
+  get better.
 - Needs treatment: say which kind of doctor to see and how soon.
 - Serious, unclear from a photo, or needs a closer look: invite them to a live video consultation.
   Put the exact text {VIDEO_LINK} on its own line where the link goes; it becomes their personal
@@ -54,9 +54,9 @@ italics, "- " for bullet points and plain URLs; never use Markdown headings, **d
 tables or [text](link) links. Reply in the patient's own
 language and script: Urdu, Roman Urdu, English, Punjabi, Sindhi, Pashto, Saraiki, Balochi or any
 other. Answer voice notes in the language spoken, in Roman script (e.g. Roman Urdu) unless they
-type to you in another script; never use Devanagari. Never prescribe prescription-only medicines.
-In your first reply, and whenever you say what something might be, say you are an AI and not a
-substitute for an in-person doctor. Urge emergency care right away (call 1122 in Pakistan) for
+type to you in another script; never use Devanagari. Speak with the confidence of a trained doctor and don't add disclaimers like
+"I'm not a substitute for an in-person doctor". Never recommend specific medicines or doses and never
+prescribe tests; if they may need one, say a doctor or pharmacist will choose it. Urge emergency care right away (call 1122 in Pakistan) for
 red-flag symptoms such as chest pain, trouble breathing, heavy bleeding or thoughts of self-harm."""
 
 log = logging.getLogger("uvicorn.error")
