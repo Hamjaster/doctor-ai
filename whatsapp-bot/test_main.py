@@ -1,9 +1,11 @@
 """Offline self-check, no network or real keys needed: python test_main.py"""
+import base64
 import functools
 import hashlib
 import hmac
 import json
 import os
+import types
 
 import httpx
 
@@ -40,6 +42,11 @@ def fake_api(request):
         if text == "need video":  # the model inviting the patient to a video consult
             return httpx.Response(200, json={"choices": [{"message": {"content": "Video par dikhayein:\nVIDEO_LINK"}}]})
         return httpx.Response(200, json={"choices": [{"message": {"content": "re: " + text}}]})
+    if request.url.path.endswith(":generateContent"):  # Gemini text-to-speech: 16-bit PCM
+        if "tts down" in body["contents"][0]["parts"][0]["text"]:
+            return httpx.Response(500, json={"error": "tts down"})
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+            {"inlineData": {"mimeType": "audio/L16;rate=24000", "data": "AAAAAA=="}}]}}]})
     if request.url.host == "generativelanguage.googleapis.com":
         return httpx.Response(200, json={"choices": [{"message": {"content": "gemini: " + body["messages"][-1]["content"]}}]})
     return httpx.Response(201, json={"id": "sent"})
@@ -152,6 +159,51 @@ def test_bot():
     ctx = client.get(f"/handoff/{token}", headers={"X-Handoff-Key": "handoff-key"}).json()
     assert ctx["name"] == "Ayesha" and ctx["phone"] == "+923001112222"
     assert ctx["messages"] == [{"from": "patient", "text": "need video"}, {"from": "doctor", "text": sent}]
+
+
+    # medicines and prescriptions they already have: the doctor explains them; emergencies ask for a location
+    assert "prescription" in main.INSTRUCTIONS and "Panadol is" in main.INSTRUCTIONS
+    assert "share their location" in main.INSTRUCTIONS
+
+    # voice note with a Google key: the reply is spoken (same language, own script) and sent as a voice note
+    main.GOOGLE_API_KEY, before = "g-key", len(calls)
+    voice = {"url": "http://localhost:3000/api/files/v2.oga", "mimetype": "audio/ogg; codecs=opus"}
+    deliver("v2", text="", hasMedia=True, media=voice)
+    urls = [c[0] for c in calls[before:]]
+    assert urls[0].endswith("/api/files/v2.oga") and urls[1] == OPENROUTER
+    assert main.VOICE_REPLY in calls[before + 1][2]["messages"][0]["content"]
+    assert urls[2].endswith("/models/gemini-2.5-flash-preview-tts:generateContent") and calls[before + 2][1] is None
+    assert urls[3:] == ["http://localhost:3001/api/sendVoice"]  # no text message for a voice note
+    voice_msg = calls[-1][2]
+    assert voice_msg["convert"] is True and voice_msg["file"]["mimetype"] == "audio/wav"
+    assert base64.b64decode(voice_msg["file"]["data"])[:4] == b"RIFF"
+    # a text message still gets text, even with the key set
+    deliver("t2", text="hello")
+    assert calls[-1][0] == SEND and calls[-1][2]["text"] == "re: hello"
+    # a link in a spoken reply follows as text; it isn't read aloud
+    deliver("v3", text="need video", hasMedia=True, media=voice)
+    assert calls[-2][0].endswith("/sendVoice") and calls[-1][0] == SEND
+    assert calls[-1][2]["text"].startswith("https://video.example/video?t=")
+    assert "https://" not in calls[-3][2]["contents"][0]["parts"][0]["text"]
+    # text-to-speech fails: the patient gets the reply as text instead of nothing
+    deliver("v4", text="tts down", hasMedia=True, media=voice)
+    assert calls[-1][0] == SEND and calls[-1][2]["text"] == "re: tts down"
+    main.GOOGLE_API_KEY = ""
+
+    # shared location: nearest hospitals with directions, no model call
+    async def fake_find(lat, lng, near):
+        assert (lat, lng) == (31.5204, 74.3587)
+        return types.SimpleNamespace(hospitals=[types.SimpleNamespace(
+            name="Services Hospital", lat=31.54, lng=74.33, distance_km=2.4, address="", phone="042 1234",
+            open_now=None, emergency=True, directions_url="https://www.google.com/maps/dir/?api=1&destination=31.54,74.33")])
+    real_find, main.find_hospitals, before = main.find_hospitals, fake_find, len(calls)
+    deliver("l1", text="", location={"latitude": "31.5204", "longitude": "74.3587"})
+    assert [c[0] for c in calls[before:]] == [SEND]
+    sent = calls[-1][2]["text"]
+    assert "Services Hospital" in sent and "2.4 km away" in sent and "destination=31.54,74.33" in sent and "1122" in sent
+    assert main.db.execute("SELECT content FROM messages WHERE role = 'user' ORDER BY id DESC").fetchone()[0] == \
+        "[shared location]"
+    main.find_hospitals = real_find
 
 
 if __name__ == "__main__":
