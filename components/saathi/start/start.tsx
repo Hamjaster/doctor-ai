@@ -360,6 +360,7 @@ function ChannelOption({
         name="channel"
         className="sr-only"
         checked={selected}
+        disabled={!available}
         onChange={onSelect}
       />
       <span
