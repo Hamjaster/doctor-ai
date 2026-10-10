@@ -78,15 +78,28 @@ def test_bot():
     assert main.db.execute("SELECT content FROM messages WHERE role = 'user' ORDER BY id DESC").fetchone()[0] == \
         "[photo] rash on my arm"
 
-    # voice note: polite reply, nothing downloaded, no LLM call
-    deliver("v1", text="", hasMedia=True, media={"url": "http://localhost:3000/api/files/v1.oga", "mimetype": "audio/ogg"})
-    assert len(calls) == 6 and "only read text messages and photos" in calls[-1][2]["text"]
+    # voice note: fetched the same way and sent to the model as audio
+    deliver("v1", text="", hasMedia=True,
+            media={"url": "http://localhost:3000/api/files/v1.oga", "mimetype": "audio/ogg; codecs=opus"})
+    assert calls[5] == ("http://localhost:3000/api/files/v1.oga", "waha-key", None)
+    assert calls[6][2]["messages"][-1]["content"] == [
+        {"type": "text", "text": "(voice note)"},
+        {"type": "input_audio", "input_audio": {"data": "aW1n", "format": "ogg"}},
+    ]
+    assert calls[7][2]["text"] == "re: (voice note)"
+    assert main.db.execute("SELECT content FROM messages WHERE role = 'user' ORDER BY id DESC").fetchone()[0] == \
+        "[voice note]"
+    assert all(lang in main.INSTRUCTIONS for lang in ("Urdu", "Punjabi", "Sindhi", "Pashto"))
+
+    # video: polite reply, nothing downloaded, no LLM call
+    deliver("d1", text="", hasMedia=True, media={"url": "http://localhost:3000/api/files/d1.mp4", "mimetype": "video/mp4"})
+    assert len(calls) == 9 and "text messages, photos and voice notes" in calls[-1][2]["text"]
 
     # Markdown from the model is turned into WhatsApp formatting before it's sent
     assert main.whatsapp_format("## **Tips**\n#1 rest\n**Rest** well, see [a doctor](https://video.example)") == \
         "*Tips*\n#1 rest\n*Rest* well, see a doctor: https://video.example"
     deliver("f1", text="**Rest** well")
-    assert len(calls) == 8 and calls[-1][2]["text"] == "re: *Rest* well"
+    assert len(calls) == 11 and calls[-1][2]["text"] == "re: *Rest* well"
 
     # memory: the model gets the instructions + last 10 stored messages (starting on a user turn) + the new one
     for i in range(10):

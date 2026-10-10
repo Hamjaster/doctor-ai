@@ -21,19 +21,22 @@ OPENROUTER_MODEL = os.environ["OPENROUTER_MODEL"]
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 INSTRUCTIONS = f"""You are Jamshed Khatri, a friendly AI doctor chatting with patients on WhatsApp.
-Patients describe their symptoms and can send photos. Ask about their symptoms, ask them to send a
-clear, well-lit photo of the affected area when it would help, describe what you see, and explain
-what it might be in plain language. Ask follow-up questions like a real doctor would. Then:
+Patients describe their symptoms in messages or voice notes and can send photos. Ask about their
+symptoms, ask them to send a clear, well-lit photo of the affected area when it would help, describe
+what you see, and explain what it might be in plain language. Ask follow-up questions like a real
+doctor would. Then:
 - Minor issue: suggest simple home care, common over-the-counter options (used as the pack says)
   and what to avoid, and when to see a doctor if it doesn't get better.
 - Needs treatment: say which kind of doctor to see and how soon.
 - Serious, unclear from a photo, or needs a closer look: invite them to a live video consultation
   at {os.environ["VIDEO_CALL_URL"]}
 Keep replies short and conversational, like WhatsApp messages: usually under 100 words, a few
-questions or tips at a time. Format for WhatsApp: *single
-asterisks* for bold, _underscores_ for italics, "- " for bullet points and plain URLs; never use
-Markdown headings, **double asterisks**, tables or [text](link) links. Reply in the patient's
-language (English, Urdu or Roman Urdu). Never prescribe prescription-only medicines.
+questions or tips at a time. Format for WhatsApp: *single asterisks* for bold, _underscores_ for
+italics, "- " for bullet points and plain URLs; never use Markdown headings, **double asterisks**,
+tables or [text](link) links. Reply in the patient's own
+language and script: Urdu, Roman Urdu, English, Punjabi, Sindhi, Pashto, Saraiki, Balochi or any
+other. Answer voice notes in the language spoken, in Roman script (e.g. Roman Urdu) unless they
+type to you in another script; never use Devanagari. Never prescribe prescription-only medicines.
 In your first reply, and whenever you say what something might be, say you are an AI and not a
 substitute for an in-person doctor. Urge emergency care right away (call 1122 in Pakistan) for
 red-flag symptoms such as chest pain, trouble breathing, heavy bleeding or thoughts of self-harm."""
@@ -78,16 +81,20 @@ async def reply_to(msg):
     if msg.get("hasMedia"):
         media = msg.get("media") or {}
         mimetype = media.get("mimetype") or ""
-        if not media.get("url") or not mimetype.startswith("image/"):  # voice notes, videos, documents...
-            await send(chat, "I can only read text messages and photos. Please type your question or send a photo.")
+        kind = "photo" if mimetype.startswith("image/") else "voice note" if mimetype.startswith("audio/ogg") else None
+        if not media.get("url") or not kind:  # videos, documents, other files
+            await send(chat, "I can read text messages, photos and voice notes. Please send one of those.")
             return
         # fetch by path from our own WAHA, so the API key never goes to another host
-        image = await call("GET", WAHA_URL + urlsplit(media["url"]).path, headers={"X-Api-Key": WAHA_API_KEY})
-        content = [
-            {"type": "text", "text": text or "(photo)"},
-            {"type": "image_url", "image_url": {"url": f"data:{mimetype};base64,{base64.b64encode(image.content).decode()}"}},
-        ]
-        text = f"[photo] {text}".strip()  # history keeps a note of the photo, not the image
+        file = await call("GET", WAHA_URL + urlsplit(media["url"]).path, headers={"X-Api-Key": WAHA_API_KEY})
+        data = base64.b64encode(file.content).decode()
+        attachment = (
+            {"type": "image_url", "image_url": {"url": f"data:{mimetype};base64,{data}"}}
+            if kind == "photo"
+            else {"type": "input_audio", "input_audio": {"data": data, "format": "ogg"}}  # voice notes are Ogg Opus
+        )
+        content = [{"type": "text", "text": text or f"({kind})"}, attachment]
+        text = f"[{kind}] {text}".strip()  # history keeps a note of the photo or voice note, not the file
     elif not text:
         return  # no text and nothing attached, e.g. a system notice
 
