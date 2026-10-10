@@ -1,103 +1,28 @@
-import { Public_Sans } from 'next/font/google';
-import localFont from 'next/font/local';
-import { ThemeProvider } from '@/components/app/theme-provider';
-import { ThemeToggle } from '@/components/app/theme-toggle';
-import { cn } from '@/lib/shadcn/utils';
+import type { Metadata, Viewport } from 'next';
+import { Inria_Serif } from 'next/font/google';
 import '@/styles/globals.css';
 
-const publicSans = Public_Sans({
-  variable: '--font-public-sans',
+const inria = Inria_Serif({
+  weight: ['300', '400', '700'],
+  style: ['normal', 'italic'],
   subsets: ['latin'],
+  variable: '--font-inria',
 });
 
-const commitMono = localFont({
-  display: 'swap',
-  variable: '--font-commit-mono',
-  src: [
-    {
-      path: '../fonts/CommitMono-400-Regular.otf',
-      weight: '400',
-      style: 'normal',
-    },
-    {
-      path: '../fonts/CommitMono-700-Regular.otf',
-      weight: '700',
-      style: 'normal',
-    },
-    {
-      path: '../fonts/CommitMono-400-Italic.otf',
-      weight: '400',
-      style: 'italic',
-    },
-    {
-      path: '../fonts/CommitMono-700-Italic.otf',
-      weight: '700',
-      style: 'italic',
-    },
-  ],
-});
+export const metadata: Metadata = {
+  title: 'Saathi: a doctor on WhatsApp',
+  description:
+    'Saathi is an AI doctor you can call on WhatsApp. Tell it what is wrong, show it on video, and leave knowing your next step.',
+};
 
-interface RootLayoutProps {
-  children: React.ReactNode;
-}
+export const viewport: Viewport = {
+  themeColor: '#2b3534',
+};
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={cn(
-        publicSans.variable,
-        commitMono.variable,
-        'scroll-smooth font-sans antialiased'
-      )}
-    >
-      <head>
-        <title>LiveKit Voice Agent</title>
-        <meta name="description" content="A voice agent built with LiveKit" />
-      </head>
-      <body className="overflow-x-hidden">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <header className="fixed top-0 left-0 z-50 hidden w-full flex-row justify-between p-6 md:flex">
-            <a
-              target="_blank"
-              rel="noopener noreferrer"
-              href="https://livekit.io"
-              className="scale-100 transition-transform duration-300 hover:scale-110"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/lk-logo.svg" alt="LiveKit Logo" className="block size-6 dark:hidden" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/lk-logo-dark.svg"
-                alt="LiveKit Logo"
-                className="hidden size-6 dark:block"
-              />
-            </a>
-            <span className="text-foreground font-mono text-xs font-bold tracking-wider uppercase">
-              Built with{' '}
-              <a
-                target="_blank"
-                rel="noopener noreferrer"
-                href="https://docs.livekit.io/agents"
-                className="underline underline-offset-4"
-              >
-                LiveKit Agents
-              </a>
-            </span>
-          </header>
-
-          {children}
-          <div className="group fixed bottom-0 left-1/2 z-50 mb-2 -translate-x-1/2">
-            <ThemeToggle className="translate-y-20 transition-transform delay-150 duration-300 group-hover:translate-y-0" />
-          </div>
-        </ThemeProvider>
-      </body>
+    <html lang="en" className={`${inria.variable} font-sans antialiased`}>
+      <body>{children}</body>
     </html>
   );
 }

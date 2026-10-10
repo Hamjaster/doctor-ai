@@ -18,6 +18,10 @@ const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
+// Only Saathi's own attributes are accepted from the browser, with a size cap.
+const ATTRIBUTE_PREFIX = 'saathi.';
+const MAX_ATTRIBUTE_LENGTH = 4000;
+
 // don't cache the results
 export const revalidate = 0;
 
@@ -40,19 +44,22 @@ export async function POST(req: Request) {
       throw new Error('LIVEKIT_API_SECRET is not defined');
     }
 
-    // Parse room config from request body.
+    // Parse room config and participant details from the request body (TokenSource.endpoint format).
     const body = await req.json();
     const roomConfig = body?.room_config
       ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })
       : new RoomConfiguration();
 
-    // Generate participant token
-    const participantName = 'user';
-    const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
-    const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
+    const participantName =
+      typeof body?.participant_name === 'string' && body.participant_name.trim()
+        ? body.participant_name.trim().slice(0, 80)
+        : 'patient';
+    const participantIdentity = `saathi_patient_${Math.floor(Math.random() * 10_000)}`;
+    const roomName = `saathi_consult_${Math.floor(Math.random() * 10_000)}`;
+    const attributes = pickAttributes(body?.participant_attributes);
 
     const participantToken = await createParticipantToken(
-      { identity: participantIdentity, name: participantName },
+      { identity: participantIdentity, name: participantName, attributes },
       roomName,
       roomConfig
     );
@@ -74,6 +81,17 @@ export async function POST(req: Request) {
       return new NextResponse(error.message, { status: 500 });
     }
   }
+}
+
+function pickAttributes(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (key.startsWith(ATTRIBUTE_PREFIX) && typeof value === 'string') {
+      out[key] = value.slice(0, MAX_ATTRIBUTE_LENGTH);
+    }
+  }
+  return out;
 }
 
 function createParticipantToken(

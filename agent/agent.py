@@ -30,8 +30,8 @@ CHAT_TOPIC = "lk.chat"
 
 
 class SaathiDoctor(Agent):
-    def __init__(self) -> None:
-        super().__init__(instructions=INSTRUCTIONS)
+    def __init__(self, instructions: str = INSTRUCTIONS) -> None:
+        super().__init__(instructions=instructions)
         self._search = MedicalSearch()
 
     @function_tool
@@ -75,18 +75,34 @@ server = AgentServer()
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext) -> None:
+    # The web app sends the patient's intake as the `saathi.brief` participant attribute.
+    # Read it before starting so Saathi opens with the notes instead of asking again.
+    await ctx.connect()
+    patient = await ctx.wait_for_participant()
+    brief = patient.attributes.get("saathi.brief", "").strip()
+    instructions = INSTRUCTIONS
+    if brief:
+        instructions += (
+            "\n\nThe patient filled in these notes before the call. Use them, confirm the main"
+            " concern briefly, and don't ask for details they already gave:\n" + brief
+        )
+
     session = AgentSession(
         llm=google.realtime.RealtimeModel(model="gemini-3.8-live", voice="Puck"),
     )
     await session.start(
-        agent=SaathiDoctor(),
+        agent=SaathiDoctor(instructions),
         room=ctx.room,
         # Video input is off by default in LiveKit Agents; turn on the patient's camera feed.
         room_options=room_io.RoomOptions(video_input=True),
     )
     await session.generate_reply(
         instructions=(
-            "Greet the patient warmly, say you are Saathi, an AI doctor and not a "
+            "Greet the patient by name, say you are Saathi, an AI doctor and not a "
+            "substitute for an in-person doctor, then briefly confirm the concern from "
+            "their notes."
+            if brief
+            else "Greet the patient warmly, say you are Saathi, an AI doctor and not a "
             "substitute for an in-person doctor, then ask what brings them in today."
         )
     )

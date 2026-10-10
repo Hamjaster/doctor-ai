@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: 'Inria Serif';
+        src: url('assets/fonts/InriaSerif-400.woff2') format('woff2');
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: 'Inria Serif';
+        src: url('assets/fonts/InriaSerif-400i.woff2') format('woff2');
+        font-weight: 400;
+        font-style: italic;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('assets/fonts/Inter-400.woff2') format('woff2');
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('assets/fonts/Inter-500.woff2') format('woff2');
+        font-weight: 500;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('assets/fonts/Inter-600.woff2') format('woff2');
+        font-weight: 600;
+      }
+
+      :root {
+        --brand: #2b3534;
+        --brand-2: #3a4746;
+        --ink: #161c1c;
+        --muted: #5f6b6a;
+        --line: #e3e7e6;
+        --bg: #f2f4f3;
+        --card: #ffffff;
+        --wa: #25d366;
+        --wa-bubble: #dcf8c6;
+        --wa-tick: #34b7f1;
+        --danger: #c8412e;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: 'Inter', sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(900px 700px at 78% 30%, rgb(255 255 255 / 0.95), transparent 70%),
+          radial-gradient(700px 600px at 10% 100%, rgb(43 53 52 / 0.08), transparent 70%), var(--bg);
+      }
+      #scene {
+        position: absolute;
+        inset: 0;
+      }
+      .serif {
+        font-family: 'Inria Serif', serif;
+        letter-spacing: -0.05em;
+      }
+
+      /* Background layer: oversized faded wordmark + hairlines */
+      #bg-word {
+        position: absolute;
+        left: -40px;
+        bottom: -60px;
+        width: 1500px;
+        height: 460px;
+        background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1500' height='460' viewBox='0 0 1500 460'><text x='0' y='400' font-family='Inria Serif, Georgia, serif' font-size='420' letter-spacing='-20' fill='%232b3534' fill-opacity='0.05'>Saathi</text></svg>") no-repeat;
+      }
+      .hair {
+        position: absolute;
+        background: var(--line);
+      }
+      #hair-v {
+        left: 860px;
+        top: 120px;
+        width: 1px;
+        height: 840px;
+      }
+
+      /* Left zone: kinetic headline + step rail */
+      #left {
+        position: absolute;
+        left: 140px;
+        top: 0;
+        width: 660px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 56px;
+      }
+      #heads {
+        position: relative;
+        height: 300px;
+      }
+      .head {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: flex-end;
+        font-size: 104px;
+        line-height: 0.98;
+        color: var(--ink);
+      }
+      .head .w {
+        display: inline-block;
+        margin-right: 0.22em;
+      }
+      .head em {
+        font-style: italic;
+      }
+      #rail {
+        display: flex;
+        gap: 14px;
+      }
+      .seg {
+        position: relative;
+        width: 120px;
+        height: 4px;
+        border-radius: 4px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .seg i {
+        position: absolute;
+        inset: 0;
+        background: var(--brand);
+        transform-origin: left center;
+        display: block;
+      }
+      #rail-labels {
+        display: flex;
+        gap: 14px;
+        margin-top: -40px;
+      }
+      #rail-labels span {
+        width: 120px;
+        font-size: 20px;
+        color: var(--muted);
+      }
+
+      /* Right zone: the product stage */
+      #stage {
+        position: absolute;
+        left: 940px;
+        top: 150px;
+        width: 840px;
+        height: 780px;
+      }
+      .panel {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Composer */
+      #composer {
+        width: 760px;
+        border-radius: 32px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        box-shadow:
+          0 40px 80px -30px rgb(22 28 28 / 0.25),
+          0 2px 0 rgb(255 255 255) inset;
+        padding: 40px 40px 28px;
+      }
+      #typed {
+        min-height: 190px;
+        font-size: 38px;
+        line-height: 1.35;
+        color: var(--ink);
+      }
+      #typed {
+        position: relative;
+      }
+      #typed .ph {
+        position: absolute;
+        left: 0;
+        top: 0;
+        color: #a3acab;
+      }
+      #typed .c {
+        opacity: 0;
+      }
+      #caret {
+        display: inline-block;
+        width: 3px;
+        height: 42px;
+        margin-left: 2px;
+        vertical-align: -6px;
+        background: var(--brand);
+      }
+      #tools {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 20px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+      }
+      .tool {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        background: #f4f6f5;
+      }
+      .tool svg {
+        width: 30px;
+        height: 30px;
+      }
+      #tools-left {
+        display: flex;
+        gap: 14px;
+      }
+      #send {
+        position: relative;
+        width: 76px;
+        height: 76px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: #e6eae9;
+        color: #9aa4a3;
+      }
+      #send-on {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: var(--brand);
+        color: #fff;
+        display: grid;
+        place-items: center;
+      }
+      #send svg,
+      #send-on svg {
+        width: 34px;
+        height: 34px;
+      }
+      #chips {
+        display: flex;
+        gap: 14px;
+        margin-top: 26px;
+      }
+      .chip {
+        padding: 14px 22px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        font-size: 22px;
+        color: var(--ink);
+      }
+
+      /* Token card */
+      #token {
+        width: 640px;
+        border-radius: 32px;
+        background: var(--brand);
+        color: #fff;
+        padding: 44px 48px;
+        box-shadow: 0 50px 90px -30px rgb(22 28 28 / 0.55);
+      }
+      #token .lbl {
+        font-size: 22px;
+        color: rgb(255 255 255 / 0.6);
+      }
+      #token .code {
+        transform-origin: left center;
+        font-size: 112px;
+        line-height: 1;
+        margin-top: 10px;
+      }
+      #token .rule {
+        height: 1px;
+        background: rgb(255 255 255 / 0.14);
+        margin: 34px 0 26px;
+        transform-origin: left center;
+      }
+      #token .who {
+        font-size: 30px;
+        font-weight: 500;
+      }
+      #token .what {
+        font-size: 26px;
+        line-height: 1.4;
+        color: rgb(255 255 255 / 0.78);
+        margin-top: 10px;
+      }
+      #token .tags {
+        display: flex;
+        gap: 10px;
+        margin-top: 24px;
+      }
+      #token .tags span {
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: rgb(255 255 255 / 0.1);
+        font-size: 20px;
+      }
+
+      /* WhatsApp chat */
+      #chat {
+        width: 600px;
+        height: 760px;
+        border-radius: 48px;
+        background: #efeae2;
+        border: 10px solid #121616;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 50px 90px -30px rgb(22 28 28 / 0.5);
+      }
+      #chat-head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 26px 24px 20px;
+        background: #ffffff;
+        border-bottom: 1px solid #e6e1d8;
+      }
+      .avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 999px;
+        background: var(--brand);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 30px;
+      }
+      #chat-name {
+        flex: 1;
+      }
+      #chat-name b {
+        display: block;
+        font-size: 26px;
+        font-weight: 600;
+      }
+      #chat-name span {
+        font-size: 18px;
+        color: #4f5958;
+      }
+      #callbtn {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        border-radius: 999px;
+        background: var(--wa);
+        color: #fff;
+        display: grid;
+        place-items: center;
+      }
+      #callbtn svg {
+        width: 30px;
+        height: 30px;
+      }
+      .ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        border: 3px solid var(--wa);
+      }
+      #chat-body {
+        flex: 1;
+        padding: 26px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        justify-content: flex-start;
+      }
+      .bubble {
+        max-width: 470px;
+        padding: 18px 20px 12px;
+        border-radius: 22px;
+        font-size: 22px;
+        line-height: 1.42;
+        box-shadow: 0 1px 1px rgb(0 0 0 / 0.08);
+      }
+      .out {
+        align-self: flex-end;
+        background: var(--wa-bubble);
+        border-top-right-radius: 6px;
+      }
+      .in {
+        align-self: flex-start;
+        background: #ffffff;
+        border-top-left-radius: 6px;
+      }
+      .meta {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        margin-top: 6px;
+        font-size: 16px;
+        color: #4f5f5b;
+      }
+      .ticks {
+        color: #5c6b68;
+      }
+      #calling {
+        align-self: center;
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 26px;
+        border-radius: 999px;
+        background: #ffffff;
+        font-size: 22px;
+        box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.2);
+      }
+      #wave {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        height: 30px;
+      }
+      #wave i {
+        display: block;
+        width: 5px;
+        height: 30px;
+        border-radius: 3px;
+        background: var(--wa);
+        transform-origin: center;
+      }
+
+      /* Next step card */
+      #next {
+        width: 720px;
+        border-radius: 32px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        padding: 44px 48px;
+        box-shadow: 0 40px 80px -30px rgb(22 28 28 / 0.25);
+      }
+      #next .kicker {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 22px;
+        color: var(--muted);
+      }
+      #next .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: var(--brand);
+      }
+      #next h3 {
+        font-size: 64px;
+        line-height: 1.02;
+        margin-top: 16px;
+        font-weight: 400;
+      }
+      #next ul {
+        list-style: none;
+        margin-top: 30px;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        border-top: 1px solid var(--line);
+      }
+      #next li {
+        display: flex;
+        gap: 18px;
+        align-items: flex-start;
+        padding: 20px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 26px;
+        line-height: 1.35;
+      }
+      #next li .ic {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: #eef1f0;
+        color: var(--brand);
+      }
+      #next li .ic svg {
+        width: 22px;
+        height: 22px;
+      }
+      #next li.warn .ic {
+        background: #fbe9e6;
+        color: var(--danger);
+      }
+      #next .foot {
+        margin-top: 22px;
+        font-size: 19px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="10"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div id="scene">
+        <div id="bg-word" aria-hidden="true"></div>
+        <div id="hair-v" class="hair"></div>
+
+        <!-- Left: what is happening, in words -->
+        <div id="left">
+          <div id="heads">
+            <h1 id="h1" class="head serif">
+              <span><span class="w">Write</span><span class="w">what’s</span><span class="w"><em>wrong.</em></span></span>
+            </h1>
+            <h1 id="h2" class="head serif">
+              <span><span class="w">Your</span><span class="w">notes,</span><span class="w"><em>ready.</em></span></span>
+            </h1>
+            <h1 id="h3" class="head serif">
+              <span><span class="w">Call</span><span class="w">Saathi</span><span class="w">on</span><span class="w"><em>WhatsApp.</em></span></span>
+            </h1>
+            <h1 id="h4" class="head serif">
+              <span><span class="w">Leave</span><span class="w">with</span><span class="w">a</span><span class="w">next</span><span class="w"><em>step.</em></span></span>
+            </h1>
+          </div>
+          <div>
+            <div id="rail">
+              <div class="seg"><i id="s1"></i></div>
+              <div class="seg"><i id="s2"></i></div>
+              <div class="seg"><i id="s3"></i></div>
+              <div class="seg"><i id="s4"></i></div>
+            </div>
+          </div>
+          <div id="rail-labels">
+            <span>Notes</span><span>Token</span><span>Call</span><span>Next step</span>
+          </div>
+        </div>
+
+        <!-- Right: the product -->
+        <div id="stage">
+          <div id="p-composer" class="panel">
+            <div id="composer-wrap">
+              <div id="composer">
+                <div id="typed"><span class="ph" id="ph">Tell Saathi what’s bothering you…</span><span id="caret"></span><span id="chars"></span></div>
+                <div id="tools">
+                  <div id="tools-left">
+                    <div class="tool">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+                    </div>
+                    <div class="tool">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg>
+                    </div>
+                  </div>
+                  <div id="send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                    <div id="send-on">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="chips">
+                <span class="chip">Start symptom check</span>
+                <span class="chip">Call on WhatsApp</span>
+                <span class="chip">Video consult</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="p-token" class="panel">
+            <div id="token">
+              <div class="lbl">Token</div>
+              <div class="code serif">SA-7K4Q</div>
+              <div class="rule"></div>
+              <div class="who">Ali · 6 yrs</div>
+              <div class="what">Fever since last night, 38.9°C. Eating less, drinking water.</div>
+              <div class="tags"><span>Started today</span><span>Severity 5 / 10</span><span>No allergies</span></div>
+            </div>
+          </div>
+
+          <div id="p-chat" class="panel">
+            <div id="chat">
+              <div id="chat-head">
+                <div class="avatar serif">S</div>
+                <div id="chat-name"><b>Saathi</b><span>AI doctor · business account</span></div>
+                <div id="callbtn">
+                  <div class="ring" id="ring1"></div>
+                  <div class="ring" id="ring2"></div>
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
+                </div>
+              </div>
+              <div id="chat-body">
+                <div class="bubble out" id="msg">
+                  <b>Saathi consult SA-7K4Q</b><br />
+                  Patient: Ali, 6 yrs<br />
+                  Concern: fever since last night, 38.9°C<br />
+                  Started: today · Severity 5/10
+                  <div class="meta">10:42 <span class="ticks" id="ticks">✓✓</span></div>
+                </div>
+                <div class="bubble in" id="reply">
+                  Got your notes. I’m Saathi, an AI doctor. Tap call when you’re ready.
+                  <div class="meta">10:42</div>
+                </div>
+                <div id="calling">
+                  <div id="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                  Calling Saathi…
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="p-next" class="panel">
+            <div id="next">
+              <div class="kicker"><span class="dot"></span>After the call</div>
+              <h3 class="serif">Care at home <em>tonight.</em></h3>
+              <ul>
+                <li id="n1">
+                  <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7c3.7 4.2 5.5 7.4 5.5 9.8a5.5 5.5 0 0 1-11 0c0-2.4 1.8-5.6 5.5-9.8z"/></svg></span>
+                  Plenty of fluids and rest. Check his temperature every few hours.
+                </li>
+                <li id="n2">
+                  <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                  See a doctor in person if the fever lasts beyond three days.
+                </li>
+                <li id="n3" class="warn">
+                  <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>
+                  Get help now if he’s very drowsy or struggling to breathe.
+                </li>
+              </ul>
+              <div class="foot">Saathi is an AI, not a replacement for a doctor who can examine him.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Build the typed message as individual characters (static, deterministic).
+      const MESSAGE = 'My son has had a fever since last night, 38.9°C. He’s eating less but drinking water.';
+      const chars = document.getElementById('chars');
+      for (const ch of MESSAGE) {
+        const s = document.createElement('span');
+        s.className = 'c';
+        s.textContent = ch;
+        chars.appendChild(s);
+      }
+
+      const tl = gsap.timeline({ paused: true, defaults: { ease: 'power3.out' } });
+      const heads = ['#h1', '#h2', '#h3', '#h4'];
+
+      // Initial state (also the loop's end state): composer visible + empty, headline 1 shown.
+      gsap.set(['#p-token', '#p-chat', '#p-next'], { autoAlpha: 0 });
+      gsap.set(['#h2', '#h3', '#h4'], { autoAlpha: 0 });
+      gsap.set('#send-on', { autoAlpha: 0, scale: 0.6 });
+      gsap.set(['#s1', '#s2', '#s3', '#s4'], { scaleX: 0 });
+
+      // ── Beat 1: typing (0.3 → 2.3)
+      tl.fromTo('#s1', { scaleX: 0 }, { scaleX: 1, duration: 2.2, ease: 'none' }, 0.2);
+      tl.to('#ph', { autoAlpha: 0, duration: 0.15, ease: 'power1.out' }, 0.3);
+      tl.fromTo(
+        '#chars .c',
+        { opacity: 0 },
+        { opacity: 1, duration: 0.01, stagger: 0.021, ease: 'none' },
+        0.35
+      );
+      tl.to('#caret', { opacity: 0, duration: 0.05, ease: 'none' }, 0.33);
+      tl.to('#caret', { opacity: 1, duration: 0.2, ease: 'none' }, 9.6);
+      tl.fromTo('#send-on', { autoAlpha: 0, scale: 0.6 }, { autoAlpha: 1, scale: 1, duration: 0.35, ease: 'back.out(2.4)' }, 1.95);
+      tl.to('#send', { scale: 0.86, duration: 0.12, ease: 'power2.in' }, 2.35);
+      tl.to('#send', { scale: 1, duration: 0.25, ease: 'back.out(3)' }, 2.47);
+
+      // ── Beat 2: notes become a token card (2.5 → 4.6)
+      tl.to('#composer-wrap', { y: -40, scale: 0.92, autoAlpha: 0, filter: 'blur(8px)', duration: 0.45, ease: 'power2.in' }, 2.55);
+      tl.to('#h1 .w', { y: -40, opacity: 0, duration: 0.3, stagger: 0.04, ease: 'power2.in' }, 2.45);
+      tl.set('#h2', { autoAlpha: 1 }, 2.7);
+      tl.fromTo('#h2 .w', { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.08, ease: 'expo.out' }, 2.75);
+      tl.fromTo('#s2', { scaleX: 0 }, { scaleX: 1, duration: 2.0, ease: 'none' }, 2.6);
+      tl.fromTo('#p-token', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'none' }, 2.85);
+      tl.fromTo('#token', { y: 120, rotateX: 28, scale: 0.9 }, { y: 0, rotateX: 0, scale: 1, duration: 0.9, ease: 'expo.out' }, 2.85);
+      tl.fromTo('#token .code', { scale: 1.25, opacity: 0, filter: 'blur(12px)' }, { scale: 1, opacity: 1, filter: 'blur(0px)', duration: 0.9, ease: 'power4.out' }, 3.05);
+      tl.fromTo('#token .rule', { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: 'power2.out' }, 3.4);
+      tl.fromTo(['#token .who', '#token .what'], { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, stagger: 0.1, ease: 'power3.out' }, 3.55);
+      tl.fromTo('#token .tags span', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, stagger: 0.07, ease: 'back.out(2)' }, 3.85);
+      tl.to('#token', { y: -8, duration: 0.6, ease: 'sine.inOut' }, 4.1);
+
+      // ── Beat 3: WhatsApp chat + call (4.6 → 7.4)
+      tl.to('#token', { x: -120, scale: 0.7, autoAlpha: 0, duration: 0.45, ease: 'power2.in' }, 4.6);
+      tl.to('#h2 .w', { y: -40, opacity: 0, duration: 0.3, stagger: 0.04, ease: 'power2.in' }, 4.55);
+      tl.set('#h3', { autoAlpha: 1 }, 4.8);
+      tl.fromTo('#h3 .w', { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.07, ease: 'expo.out' }, 4.85);
+      tl.fromTo('#s3', { scaleX: 0 }, { scaleX: 1, duration: 2.7, ease: 'none' }, 4.7);
+      tl.fromTo('#p-chat', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'none' }, 4.85);
+      tl.fromTo('#chat', { y: 160, scale: 0.94 }, { y: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, 4.85);
+      tl.fromTo('#msg', { x: 80, opacity: 0, scale: 0.9 }, { x: 0, opacity: 1, scale: 1, duration: 0.55, ease: 'back.out(1.6)' }, 5.2);
+      tl.to('#ticks', { color: '#0f6a96', duration: 0.2, ease: 'none' }, 5.75);
+      tl.fromTo('#reply', { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 5.9);
+      tl.to('#callbtn', { scale: 1.14, duration: 0.18, ease: 'power2.out' }, 6.35);
+      tl.to('#callbtn', { scale: 1, duration: 0.3, ease: 'back.out(3)' }, 6.53);
+      tl.fromTo('#ring1', { scale: 1, opacity: 0.9 }, { scale: 2.1, opacity: 0, duration: 0.9, repeat: 1, ease: 'power1.out' }, 6.4);
+      tl.fromTo('#ring2', { scale: 1, opacity: 0.9 }, { scale: 2.1, opacity: 0, duration: 0.9, repeat: 1, ease: 'power1.out' }, 6.85);
+      tl.fromTo('#calling', { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'power3.out' }, 6.5);
+      tl.fromTo('#wave i', { scaleY: 0.25 }, { scaleY: 1, duration: 0.18, repeat: 5, yoyo: true, stagger: 0.06, ease: 'sine.inOut' }, 6.55);
+
+      // ── Beat 4: the next step (7.4 → 9.3)
+      tl.to('#chat', { y: -60, scale: 0.94, autoAlpha: 0, duration: 0.45, ease: 'power2.in' }, 7.35);
+      tl.to('#h3 .w', { y: -40, opacity: 0, duration: 0.3, stagger: 0.04, ease: 'power2.in' }, 7.3);
+      tl.set('#h4', { autoAlpha: 1 }, 7.55);
+      tl.fromTo('#h4 .w', { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, stagger: 0.07, ease: 'expo.out' }, 7.6);
+      tl.fromTo('#s4', { scaleX: 0 }, { scaleX: 1, duration: 1.8, ease: 'none' }, 7.45);
+      tl.fromTo('#p-next', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'none' }, 7.6);
+      tl.fromTo('#next', { y: 90, scale: 0.96 }, { y: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, 7.6);
+      tl.fromTo('#next h3', { opacity: 0, filter: 'blur(10px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.6, ease: 'power2.out' }, 7.8);
+      tl.fromTo(['#n1', '#n2', '#n3'], { x: 40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, stagger: 0.14, ease: 'power3.out' }, 8.0);
+      tl.fromTo('#next .foot', { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'sine.out' }, 8.55);
+
+      // ── Loop: back to the empty composer (9.3 → 10)
+      tl.to('#next', { y: -40, autoAlpha: 0, duration: 0.35, ease: 'power2.in' }, 9.3);
+      tl.to('#h4 .w', { y: -40, opacity: 0, duration: 0.28, stagger: 0.03, ease: 'power2.in' }, 9.28);
+      tl.to(['#s1', '#s2', '#s3', '#s4'], { scaleX: 0, duration: 0.4, ease: 'power2.inOut' }, 9.4);
+      tl.set(['#chars .c'], { opacity: 0 }, 9.45);
+      tl.set('#send-on', { autoAlpha: 0, scale: 0.6 }, 9.45);
+      tl.fromTo('#composer-wrap', { y: 40, scale: 0.96, autoAlpha: 0, filter: 'blur(8px)' }, { y: 0, scale: 1, autoAlpha: 1, filter: 'blur(0px)', duration: 0.5, ease: 'power3.out', immediateRender: false }, 9.5);
+      tl.to('#ph', { autoAlpha: 1, duration: 0.3, ease: 'sine.out' }, 9.55);
+      tl.fromTo('#h1 .w', { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, stagger: 0.05, ease: 'expo.out', immediateRender: false }, 9.5);
+
+      window.__timelines['main'] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
