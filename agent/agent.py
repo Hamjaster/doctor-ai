@@ -1,6 +1,8 @@
-"""doctor.ai AI doctor: LiveKit agent using Gemini Live with camera input."""
+"""doctor.ai AI doctor: LiveKit agent using Gemini Live with camera input, with fallbacks."""
 
+import asyncio
 import logging
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -8,14 +10,21 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    APIConnectOptions,
+    CloseEvent,
+    CloseReason,
     JobContext,
     RunContext,
     cli,
     function_tool,
     get_job_context,
+    inference,
+    llm,
     room_io,
+    stt,
+    tts,
 )
-from livekit.plugins import google
+from livekit.plugins import deepgram, google, openai, silero
 
 load_dotenv()
 
@@ -28,10 +37,62 @@ INSTRUCTIONS = (Path(__file__).parent / "saathi_prompt.md").read_text(encoding="
 # Topic the frontend's chat transcript listens on.
 CHAT_TOPIC = "lk.chat"
 
+# Realtime models, tried in order; when one fails mid-call the next takes over with the
+# conversation so far. Names with a "/" go through LiveKit Inference, billed to LiveKit Cloud
+# instead of the Google key, so they still work when the Gemini quota runs out.
+LIVE_MODELS = os.getenv(
+    "SAATHI_LIVE_MODELS",
+    "gemini-3.8-live,gemini-2.5-flash-native-audio-latest,openai/gpt-realtime-2.1-mini",
+).split(",")
+# Fail over quickly: the patient is waiting on a live call.
+LIVE_CONNECT_OPTIONS = APIConnectOptions(max_retry=1, retry_interval=1.0, timeout=10.0)
+# If every realtime model fails, the call carries on as a speech-to-text, LLM, text-to-speech
+# pipeline. It can't see the camera. Set SAATHI_VOICE=pipeline to start with it.
+PIPELINE_LLMS = os.getenv(
+    "SAATHI_PIPELINE_LLMS", "google/gemini-3.8-flash,openai/gpt-4.1-mini"
+).split(",")  # through OpenRouter
+
+
+def _realtime_model(name: str) -> llm.RealtimeModel:
+    if "/" in name:
+        return inference.RealtimeModel(name, conn_options=LIVE_CONNECT_OPTIONS)
+    return google.realtime.RealtimeModel(model=name, voice="Puck", conn_options=LIVE_CONNECT_OPTIONS)
+
+
+def _realtime_session() -> AgentSession:
+    return AgentSession(
+        llm=llm.RealtimeModelFallbackAdapter([_realtime_model(m) for m in LIVE_MODELS])
+    )
+
+
+def _pipeline_session() -> AgentSession:
+    # Each stage has a backup on a different account: Deepgram's own API, then LiveKit Inference.
+    llms: list[llm.LLM] = []
+    if os.getenv("OPENROUTER_API_KEY"):
+        llms.append(
+            openai.LLM.with_openrouter(model=PIPELINE_LLMS[0], fallback_models=PIPELINE_LLMS[1:])
+        )
+    llms += [google.LLM(model="gemini-flash-lite-latest"), inference.LLM("google/gemini-2.5-flash")]
+    return AgentSession(
+        stt=stt.FallbackAdapter(
+            [
+                deepgram.STT(model="nova-3", language="multi"),
+                inference.STT("deepgram/nova-3", language="multi"),
+            ]
+        ),
+        llm=llm.FallbackAdapter(llms),
+        tts=tts.FallbackAdapter(
+            [deepgram.TTS(model="aura-2-orion-en"), inference.TTS("cartesia/sonic-3")]
+        ),
+        vad=silero.VAD.load(),
+    )
+
 
 class SaathiDoctor(Agent):
-    def __init__(self, instructions: str = INSTRUCTIONS) -> None:
-        super().__init__(instructions=instructions)
+    def __init__(
+        self, instructions: str = INSTRUCTIONS, chat_ctx: llm.ChatContext | None = None
+    ) -> None:
+        super().__init__(instructions=instructions, chat_ctx=chat_ctx)
         self._search = MedicalSearch()
 
     @function_tool
@@ -87,15 +148,41 @@ async def entrypoint(ctx: JobContext) -> None:
             " details they already gave. Take their health background into account:\n" + brief
         )
 
-    session = AgentSession(
-        llm=google.realtime.RealtimeModel(model="gemini-3.8-live", voice="Puck"),
-    )
-    await session.start(
-        agent=SaathiDoctor(instructions),
-        room=ctx.room,
-        # Video input is off by default in LiveKit Agents; turn on the patient's camera feed.
-        room_options=room_io.RoomOptions(video_input=True),
-    )
+    async def start_pipeline(history: llm.ChatContext | None = None) -> AgentSession:
+        session = _pipeline_session()
+        await session.start(agent=SaathiDoctor(instructions, history), room=ctx.room)
+        return session
+
+    if os.getenv("SAATHI_VOICE") == "pipeline":
+        session = await start_pipeline()
+    else:
+        session = _realtime_session()
+        handover: list[asyncio.Task[None]] = []
+
+        @session.on("close")
+        def _on_close(ev: CloseEvent) -> None:
+            # Every realtime model failed. Carry on in the same room without the camera.
+            if ev.reason != CloseReason.ERROR or not ctx.room.isconnected():
+                return
+            logger.error("all realtime models failed (%s), switching to the voice pipeline", ev.error)
+            history = session.history.copy(exclude_function_call=True, exclude_instructions=True)
+
+            async def resume() -> None:
+                fallback = await start_pipeline(history)
+                fallback.generate_reply(
+                    instructions="Apologise briefly for the connection hiccup, say you can't see "
+                    "their camera for the rest of the call, and carry on from where you left off."
+                )
+
+            # Keep a reference so the task isn't garbage collected before it runs.
+            handover.append(asyncio.create_task(resume()))
+
+        await session.start(
+            agent=SaathiDoctor(instructions),
+            room=ctx.room,
+            # Video input is off by default in LiveKit Agents; turn on the patient's camera feed.
+            room_options=room_io.RoomOptions(video_input=True),
+        )
     await session.generate_reply(
         instructions=(
             "Greet the patient by name, say you are doctor.ai, an AI doctor and not a "
