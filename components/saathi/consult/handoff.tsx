@@ -59,7 +59,7 @@ export function Handoff({
           <AnimatedText
             delay={0.3}
             stagger={0.04}
-            text="Saathi needs to know who the consult is for and what’s wrong before you call."
+            text="doctor.ai needs to know who the consult is for and what’s wrong before you call."
             className="mt-4 leading-relaxed text-gray-600"
           />
           <motion.div {...rise(0.7)}>
@@ -83,7 +83,7 @@ export function Handoff({
     whatsappNumber &&
     (chatHref!.length <= QR_MAX_LENGTH
       ? chatHref!
-      : waChatLink(whatsappNumber, `Saathi consult ${intake.ref}`));
+      : waChatLink(whatsappNumber, `doctor.ai consult ${intake.ref}`));
 
   return (
     <Frame>
@@ -97,7 +97,7 @@ export function Handoff({
             <Siren className="mt-0.5 size-6 shrink-0" />
             <p className="leading-relaxed">
               <strong className="font-semibold">You marked an emergency sign.</strong> Call your
-              local emergency number or go to the nearest emergency department now. Saathi can’t
+              local emergency number or go to the nearest emergency department now. doctor.ai can’t
               treat an emergency over a call.
             </p>
           </motion.div>
@@ -120,7 +120,7 @@ export function Handoff({
                 <AnimatedText
                   delay={0.35}
                   stagger={0.03}
-                  text="Send the notes first so Saathi has read them when it picks up, then start the call. Keep your token handy in case Saathi asks for it."
+                  text="Send the notes first so doctor.ai has read them when it picks up, then start the call. Keep your token handy in case doctor.ai asks for it."
                   className="mt-5 max-w-xl leading-relaxed text-gray-600"
                 />
 
@@ -129,7 +129,7 @@ export function Handoff({
                     n={1}
                     delay={0.5}
                     title="Send your notes"
-                    body="Opens a WhatsApp chat with Saathi with your notes already typed. Press send."
+                    body="Opens a WhatsApp chat with doctor.ai with your notes already typed. Press send."
                   >
                     <a
                       href={chatHref!}
@@ -144,7 +144,7 @@ export function Handoff({
                   <Step
                     n={2}
                     delay={0.62}
-                    title="Call Saathi"
+                    title="Call doctor.ai"
                     body="Starts a WhatsApp voice call. On a computer, scan the code below with your phone instead."
                   >
                     <a
@@ -152,7 +152,7 @@ export function Handoff({
                       onClick={() => actions.logConsult(profile.id, 'whatsapp-call')}
                       className="bg-wa inline-flex items-center gap-2 rounded-lg px-6 py-3.5 font-semibold text-[#06301a] transition-transform hover:-translate-y-0.5"
                     >
-                      <Phone className="size-4 fill-current" /> Call Saathi on WhatsApp
+                      <Phone className="size-4 fill-current" /> Call doctor.ai on WhatsApp
                     </a>
                   </Step>
                 </ol>
@@ -163,7 +163,7 @@ export function Handoff({
                 >
                   <QR
                     value={qrValue!}
-                    label="QR code that opens a WhatsApp chat with Saathi"
+                    label="QR code that opens a WhatsApp chat with doctor.ai"
                     className="size-44 shrink-0 [&_svg]:size-full [&_svg]:[shape-rendering:crispEdges]"
                   />
                   <div>
@@ -175,7 +175,7 @@ export function Handoff({
                       Send them, then tap the call icon at the top of the chat.
                     </p>
                     <p className="mt-3 text-xs text-gray-500 tabular-nums">
-                      Saathi’s number: +{whatsappNumber.replace(/\D/g, '')}
+                      doctor.ai’s number: +{whatsappNumber.replace(/\D/g, '')}
                     </p>
                   </div>
                 </motion.div>
@@ -186,10 +186,10 @@ export function Handoff({
                 className="mt-8 rounded-2xl border border-dashed border-gray-300 bg-white p-6"
               >
                 <p className="font-medium text-gray-900">
-                  Saathi’s WhatsApp line isn’t connected yet.
+                  doctor.ai’s WhatsApp line isn’t connected yet.
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                  You can still talk to Saathi now in a video consult in your browser.
+                  You can still talk to doctor.ai now in a video consult in your browser.
                 </p>
                 {isDev && (
                   <p className="mt-3 text-xs text-gray-500">
@@ -210,7 +210,7 @@ export function Handoff({
                 </span>
                 <div>
                   <p className="font-display tracking-display-sm text-xl">
-                    Saathi needs to see it?
+                    doctor.ai needs to see it?
                   </p>
                   <p className="mt-1 max-w-sm text-sm leading-relaxed text-gray-300">
                     WhatsApp calls are voice only. Start a video consult here and hold the problem
@@ -255,7 +255,7 @@ export function Handoff({
                 <span className="mr-2 inline-block transition-transform group-open:rotate-90">
                   ›
                 </span>
-                See exactly what Saathi receives
+                See exactly what doctor.ai receives
               </summary>
               <pre className="mt-4 font-sans text-[13px] leading-relaxed whitespace-pre-wrap text-gray-600">
                 {brief}

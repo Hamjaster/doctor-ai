@@ -119,7 +119,7 @@ const REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export function newRef() {
   let s = '';
   for (let i = 0; i < 4; i++) s += REF_ALPHABET[Math.floor(Math.random() * REF_ALPHABET.length)];
-  return `SA-${s}`;
+  return `DA-${s}`;
 }
 
 export const actions = {

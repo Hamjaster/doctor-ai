@@ -1,4 +1,4 @@
-"""Convert a Microsoft Rocketbox avatar (MIT) to a web-ready GLB for Saathi.
+"""Convert a Microsoft Rocketbox avatar (MIT) to a web-ready GLB for doctor.ai.
 
     blender -b -P scripts/avatar/convert_rocketbox.py -- <avatar_dir> <name> <out.glb>
 

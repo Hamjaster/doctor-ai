@@ -58,7 +58,9 @@ export function VideoConsult({ agentName }: { agentName?: string }) {
             text="Start with your notes."
             className="font-display tracking-display text-4xl text-gray-900 md:text-5xl"
           />
-          <p className="mt-3 text-gray-600">Saathi reads them before the video consult begins.</p>
+          <p className="mt-3 text-gray-600">
+            doctor.ai reads them before the video consult begins.
+          </p>
           <Link
             href="/dashboard"
             className="bg-brand mt-8 inline-flex rounded-lg px-6 py-3.5 font-medium text-white"
@@ -122,7 +124,7 @@ function Stage({ profile, intake }: { profile: Profile; intake: Intake }) {
     } catch (e) {
       setError(
         e instanceof Error && /permission|denied|notallowed/i.test(e.message + e.name)
-          ? 'Saathi needs your camera and microphone. Allow them in your browser settings, then try again.'
+          ? 'doctor.ai needs your camera and microphone. Allow them in your browser settings, then try again.'
           : 'The consult could not start. Check your connection and try again.'
       );
     } finally {
@@ -139,7 +141,7 @@ function Stage({ profile, intake }: { profile: Profile; intake: Intake }) {
   useEffect(() => {
     if (phase === 'live' && agent.state === 'failed') {
       setError(
-        'Saathi couldn’t join the call. Try again in a minute.' +
+        'doctor.ai couldn’t join the call. Try again in a minute.' +
           (process.env.NODE_ENV !== 'production'
             ? ` (${agent.failureReasons?.join('; ') || 'agent did not connect'}. Is the agent worker running? cd agent && uv run agent.py dev)`
             : '')
@@ -195,14 +197,14 @@ function Lobby({
         <div className="order-2 lg:order-1">
           <AnimatedText
             as="h1"
-            text="Saathi will see what your camera sees."
+            text="doctor.ai will see what your camera sees."
             className="font-display tracking-display text-4xl leading-[1.05] text-gray-900 md:text-6xl"
           />
           <ul className="mt-8 flex flex-col gap-3 text-gray-700">
             {[
               'Sit near a window or a bright light. Daylight shows colour best.',
               'Keep any medicines or reports you want to ask about within reach.',
-              `Saathi has read ${
+              `doctor.ai has read ${
                 profile.relation === 'self' ? 'your' : `${firstName(profile.name)}’s`
               } notes, so you can start with what’s changed.`,
             ].map((t, i) => (
@@ -239,8 +241,8 @@ function Lobby({
             {starting ? 'Connecting…' : 'Start video consult'}
           </motion.button>
           <p className="mt-5 text-xs leading-relaxed text-gray-500">
-            Token {intake.ref}. Your browser will ask for camera and microphone access. Saathi is an
-            AI, not a doctor who can examine you.
+            Token {intake.ref}. Your browser will ask for camera and microphone access. doctor.ai is
+            an AI, not a doctor who can examine you.
           </p>
         </div>
         <div className="relative order-1 h-[38svh] min-h-[260px] lg:order-2 lg:h-[min(70vh,640px)]">
@@ -259,15 +261,15 @@ function Lobby({
 /* ───────────────────────── Live ───────────────────────── */
 
 const STATE_LABEL: Record<string, string> = {
-  connecting: 'Saathi is joining',
-  initializing: 'Saathi is joining',
-  'pre-connect-buffering': 'Saathi is joining',
-  idle: 'Saathi is joining',
+  connecting: 'doctor.ai is joining',
+  initializing: 'doctor.ai is joining',
+  'pre-connect-buffering': 'doctor.ai is joining',
+  idle: 'doctor.ai is joining',
   listening: 'Listening',
   thinking: 'Thinking',
   speaking: 'Speaking',
   disconnected: 'Call ended',
-  failed: 'Saathi couldn’t join',
+  failed: 'doctor.ai couldn’t join',
 };
 
 const glass = 'bg-white/[0.06] ring-1 ring-white/10 backdrop-blur-xl';
@@ -302,7 +304,7 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
       <header className="flex shrink-0 items-center justify-between gap-4 px-4 py-3 sm:px-5 lg:px-6 lg:py-4">
         <div className="flex items-center gap-3">
           <span className="font-display tracking-display-sm text-2xl leading-none font-bold">
-            Saathi
+            doctor<span className="text-white/55">.ai</span>
           </span>
           <LiveBadge />
         </div>
@@ -317,7 +319,7 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 sm:px-4 sm:pb-4 lg:grid lg:grid-cols-[1fr_400px] lg:gap-4 lg:px-5 lg:pb-5">
-        {/* What Saathi sees */}
+        {/* What doctor.ai sees */}
         <motion.section
           aria-label="Your camera"
           initial={{ opacity: 0, scale: 0.98 }}
@@ -345,7 +347,7 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
                   Your camera is off.
                 </p>
                 <p className="mt-1.5 text-sm text-white/55">
-                  Turn it on to show Saathi the problem.
+                  Turn it on to show doctor.ai the problem.
                 </p>
                 <button
                   type="button"
@@ -377,7 +379,7 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
             )}
           >
             <span className="bg-wa size-1.5 rounded-full" />
-            What Saathi sees
+            What doctor.ai sees
             {facing === 'environment' && <span className="text-white/55">· Back camera</span>}
           </p>
 
@@ -426,7 +428,7 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
           </div>
         </motion.section>
 
-        {/* Saathi + transcript */}
+        {/* doctor.ai + transcript */}
         <motion.aside
           initial={{ opacity: 0, x: 24 }}
           animate={{ opacity: 1, x: 0 }}
@@ -442,7 +444,7 @@ function Live({ profile, intake, onEnd }: { profile: Profile; intake: Intake; on
       </div>
 
       <StartAudio
-        label="Tap to hear Saathi"
+        label="Tap to hear doctor.ai"
         className="fixed inset-x-0 bottom-28 z-20 mx-auto w-fit rounded-full bg-white px-5 py-3 font-medium text-gray-900 shadow-2xl shadow-black/40"
       />
     </div>
@@ -552,7 +554,7 @@ function captionTail(text: string, max = 150) {
   return `…${cut.slice(cut.indexOf(' ') + 1)}`;
 }
 
-/** Subtitles over the video while Saathi speaks, in the hero's caption style. */
+/** Subtitles over the video while doctor.ai speaks, in the hero's caption style. */
 function Captions({ messages }: { messages: ReceivedMessage[] }) {
   const agent = useAgent();
   const reduce = useReducedMotion();
@@ -588,7 +590,7 @@ const AGENT_MOOD: Record<string, AvatarMood> = {
   speaking: 'speaking',
 };
 
-/** Saathi's face for the call: the rigged avatar, driven by the agent's state and voice. */
+/** doctor.ai's face for the call: the rigged avatar, driven by the agent's state and voice. */
 function Presence() {
   const agent = useAgent();
   const volume = useTrackVolume(agent.microphoneTrack);
@@ -602,7 +604,7 @@ function Presence() {
   useEffect(() => {
     drive.current.level = volume;
   }, [volume]);
-  // Wave hello once Saathi has joined.
+  // Wave hello once doctor.ai has joined.
   useEffect(() => {
     if (!joining) drive.current.waveAt = performance.now();
   }, [joining]);
@@ -610,7 +612,7 @@ function Presence() {
   return (
     <div className="flex items-center gap-4 border-b border-white/10 p-3 lg:flex-col lg:items-stretch lg:p-4">
       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-b from-white/[0.08] to-white/0 ring-1 ring-white/10 lg:h-64 lg:w-full lg:rounded-[22px]">
-        {/* Halo that breathes with Saathi's voice */}
+        {/* Halo that breathes with doctor.ai's voice */}
         <div
           aria-hidden
           className="absolute inset-0 transition-[transform,opacity] duration-150"
@@ -628,7 +630,7 @@ function Presence() {
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:px-1 lg:pt-1">
         <div className="min-w-0">
-          <p className="font-display tracking-display-sm text-2xl leading-none">Saathi</p>
+          <p className="font-display tracking-display-sm text-2xl leading-none">doctor.ai</p>
           <p
             className={cn(
               'mt-2 flex items-center gap-2 text-sm text-white/65',
@@ -644,7 +646,7 @@ function Presence() {
   );
 }
 
-/** A small live sign for what Saathi is doing: bars when speaking, dots when thinking. */
+/** A small live sign for what doctor.ai is doing: bars when speaking, dots when thinking. */
 function StateGlyph({ state, level }: { state: string; level: number }) {
   const reduce = useReducedMotion();
   if (state === 'speaking') {
@@ -685,7 +687,7 @@ function StateGlyph({ state, level }: { state: string; level: number }) {
   return <span aria-hidden className="size-2 rounded-full bg-white/40" />;
 }
 
-// Saathi posts its sources as Markdown links in the chat. Render those, and bare
+// doctor.ai posts its sources as Markdown links in the chat. Render those, and bare
 // http(s) URLs, as links; everything else stays plain text.
 const LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/g;
 
@@ -744,7 +746,7 @@ function Transcript({
               Just talk, like on a phone call.
             </p>
             <p className="mt-1 text-sm text-white/45">
-              Captions appear here as you and Saathi talk.
+              Captions appear here as you and doctor.ai talk.
             </p>
           </div>
         ) : (
@@ -768,7 +770,7 @@ function Transcript({
                   >
                     {first && (
                       <span className="mb-1.5 px-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">
-                        {mine ? patientName : 'Saathi'}
+                        {mine ? patientName : 'doctor.ai'}
                       </span>
                     )}
                     <div
@@ -792,7 +794,7 @@ function Transcript({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   className="mt-1.5 flex"
-                  aria-label="Saathi is thinking"
+                  aria-label="doctor.ai is thinking"
                 >
                   <span className="flex items-center rounded-2xl rounded-tl-md bg-white/[0.08] px-4 py-3.5 ring-1 ring-white/[0.06]">
                     <StateGlyph state="thinking" level={0} />
@@ -816,7 +818,7 @@ function Transcript({
       >
         <div className="flex items-center gap-2 rounded-full bg-white/[0.07] p-1.5 pl-4 ring-1 ring-white/10 transition-shadow focus-within:ring-white/30">
           <label htmlFor="typed-message" className="sr-only">
-            Type a message to Saathi
+            Type a message to doctor.ai
           </label>
           <input
             id="typed-message"

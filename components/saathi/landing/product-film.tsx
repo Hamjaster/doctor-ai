@@ -13,7 +13,7 @@ const POINTS = [
   {
     icon: NotebookPen,
     title: 'Your notes arrive first',
-    body: 'Send the slip in the chat, and Saathi has read it before it picks up.',
+    body: 'Send the slip in the chat, and doctor.ai has read it before it picks up.',
   },
   {
     icon: Captions,
@@ -67,7 +67,7 @@ export function ProductFilm() {
               name="consult-flow"
               width={1920}
               height={1080}
-              label="A Saathi consult: notes typed into the composer, a token card, the notes sent in a WhatsApp chat, a call, and a next-step summary."
+              label="A doctor.ai consult: notes typed into the composer, a token card, the notes sent in a WhatsApp chat, a call, and a next-step summary."
             />
           </motion.div>
         </div>
@@ -112,7 +112,7 @@ export function ProductFilm() {
                 name="whatsapp-call"
                 width={1080}
                 height={1350}
-                label="A WhatsApp voice call with Saathi, with live captions of the conversation."
+                label="A WhatsApp voice call with doctor.ai, with live captions of the conversation."
               />
             </TiltCard>
           </Reveal>

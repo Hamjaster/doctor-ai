@@ -74,7 +74,7 @@ export function Statement() {
             inView
             delay={0.3}
             stagger={0.04}
-            text="Saathi listens, asks the questions a good doctor would, looks when you show it, and tells you plainly what to do next."
+            text="doctor.ai listens, asks the questions a good doctor would, looks when you show it, and tells you plainly what to do next."
             className="max-w-sm text-gray-300 md:text-right"
           />
         </div>
@@ -106,15 +106,15 @@ export function Statement() {
 const STEPS = [
   {
     title: 'Write down what’s wrong',
-    body: 'Age, medicines, allergies and today’s problem. Two minutes, and Saathi reads it before you speak.',
+    body: 'Age, medicines, allergies and today’s problem. Two minutes, and doctor.ai reads it before you speak.',
   },
   {
-    title: 'Call Saathi on WhatsApp',
+    title: 'Call doctor.ai on WhatsApp',
     body: 'Send your notes in the chat, then tap call. You start with the problem, not with paperwork.',
   },
   {
     title: 'Leave with a next step',
-    body: 'Care at home, see a doctor this week, or get help now. Saathi tells you which, in plain words.',
+    body: 'Care at home, see a doctor this week, or get help now. doctor.ai tells you which, in plain words.',
   },
 ];
 
@@ -295,10 +295,10 @@ function StepScreen({ step }: { step: number }) {
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-[#efeae2] shadow-2xl shadow-gray-900/10">
         <div className="flex items-center gap-3 bg-white px-4 py-3">
           <span className="font-display bg-brand grid size-9 place-items-center rounded-full text-white">
-            S
+            d
           </span>
           <span className="flex-1">
-            <span className="block text-sm font-medium text-gray-900">Saathi</span>
+            <span className="block text-sm font-medium text-gray-900">doctor.ai</span>
             <span className="block text-xs text-gray-500">AI doctor</span>
           </span>
           <span className="relative grid size-10 place-items-center rounded-full bg-[#25d366] text-white">
@@ -317,7 +317,7 @@ function StepScreen({ step }: { step: number }) {
             transition={{ delay: 0.2 }}
             className="ml-auto max-w-[85%] rounded-xl rounded-tr-sm bg-[#dcf8c6] px-3 py-2 text-sm leading-relaxed text-gray-900"
           >
-            Saathi consult SA-7K4Q · Patient: Ayesha, 34 · Concern: itchy rash on forearm
+            doctor.ai consult DA-7K4Q · Patient: Ayesha, 34 · Concern: itchy rash on forearm
           </motion.div>
           <motion.div
             initial={{ opacity: 0, x: -30 }}
@@ -387,7 +387,7 @@ export function ShowOnVideo() {
             inView
             delay={0.3}
             stagger={0.04}
-            text="WhatsApp calls are voice only. When Saathi needs to see, switch to a video consult in your browser and hold it up to the camera."
+            text="WhatsApp calls are voice only. When doctor.ai needs to see, switch to a video consult in your browser and hold it up to the camera."
             className="max-w-sm text-gray-600 md:justify-self-end md:text-right"
           />
         </div>
@@ -400,7 +400,7 @@ export function ShowOnVideo() {
                 Hold it up to the camera.
               </h3>
               <p className="mt-3 max-w-xs text-gray-300">
-                Saathi looks, asks what it needs to, and tells you what it sees.
+                doctor.ai looks, asks what it needs to, and tells you what it sees.
               </p>
               <Link
                 href="/dashboard"
@@ -467,19 +467,19 @@ export function Safety() {
             <AnimatedText
               as="h2"
               inView
-              text="Saathi knows when a call isn’t enough."
+              text="doctor.ai knows when a call isn’t enough."
               className="font-display tracking-display mt-6 text-3xl leading-[1.05] md:text-5xl"
             />
             <AnimatedText
               inView
               delay={0.4}
               stagger={0.03}
-              text="Every call starts with Saathi telling you it’s an AI. If what you describe sounds like an emergency, it tells you to get help now instead of carrying on."
+              text="Every call starts with doctor.ai telling you it’s an AI. If what you describe sounds like an emergency, it tells you to get help now instead of carrying on."
               className="mt-6 max-w-md leading-relaxed text-gray-300"
             />
           </div>
           <div>
-            <p className="text-sm text-gray-300">Get emergency care, don’t call Saathi, for:</p>
+            <p className="text-sm text-gray-300">Get emergency care, don’t call doctor.ai, for:</p>
             <ul className="mt-4 divide-y divide-white/10 border-y border-white/10">
               {RED_FLAGS.map((f, i) => (
                 <motion.li
@@ -529,7 +529,7 @@ export function Families() {
             inView
             delay={0.3}
             stagger={0.03}
-            text="Keep Ammi’s blood pressure tablets, Abbu’s allergies and the kids’ ages in one place. Pick who the consult is for, and Saathi gets the right notes."
+            text="Keep Ammi’s blood pressure tablets, Abbu’s allergies and the kids’ ages in one place. Pick who the consult is for, and doctor.ai gets the right notes."
             className="mt-6 max-w-md leading-relaxed text-gray-600"
           />
         </div>
@@ -565,8 +565,8 @@ export function Families() {
 
 const FAQ = [
   {
-    q: 'Is Saathi a real doctor?',
-    a: 'No. Saathi is an AI, and it says so on every call. It helps you understand what might be going on and how urgent it is. It doesn’t replace a doctor who can examine you.',
+    q: 'Is doctor.ai a real doctor?',
+    a: 'No. doctor.ai is an AI, and it says so on every call. It helps you understand what might be going on and how urgent it is. It doesn’t replace a doctor who can examine you.',
   },
   {
     q: 'What do I need?',
@@ -574,7 +574,7 @@ const FAQ = [
   },
   {
     q: 'Where is my health profile kept?',
-    a: 'In this browser, on your device. Your notes reach Saathi only when you send them in WhatsApp or start a video consult.',
+    a: 'In this browser, on your device. Your notes reach doctor.ai only when you send them in WhatsApp or start a video consult.',
   },
   {
     q: 'Can I set up a profile for my parents?',
@@ -665,7 +665,7 @@ export function Closing() {
           <AnimatedText
             as="h2"
             inView
-            text="Feeling unwell? Saathi is one call away."
+            text="Feeling unwell? doctor.ai is one call away."
             className="font-display tracking-display max-w-4xl text-4xl leading-[1.02] md:text-6xl lg:text-7xl"
           />
           <Reveal delay={0.5} className="mt-10 flex flex-wrap gap-3">
@@ -688,7 +688,7 @@ export function Closing() {
           <div className="mt-24 flex flex-col gap-6 border-t border-white/10 pt-8 text-sm text-gray-400 md:flex-row md:items-end md:justify-between">
             <Wordmark tone="light" />
             <p className="max-w-lg leading-relaxed">
-              Saathi is an AI and does not replace a doctor who can examine you. In an emergency,
+              doctor.ai is an AI and does not replace a doctor who can examine you. In an emergency,
               call your local emergency number now.
             </p>
           </div>

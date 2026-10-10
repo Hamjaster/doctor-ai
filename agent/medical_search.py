@@ -181,6 +181,6 @@ def _strip_html(text: str) -> str:
 
 
 def format_sources_markdown(result: LookupResult) -> str:
-    lines = ["**Sources Saathi checked:**"]
+    lines = ["**Sources doctor.ai checked:**"]
     lines += [f"- [{s.title}]({s.url})" for s in result.sources]
     return "\n".join(lines)

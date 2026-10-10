@@ -60,14 +60,14 @@ export function Dashboard() {
           <AnimatedText
             as="h1"
             text={
-              active ? 'Who else do you look after?' : 'First, a few details Saathi should know.'
+              active ? 'Who else do you look after?' : 'First, a few details doctor.ai should know.'
             }
             className="font-display tracking-display text-4xl leading-[1.05] text-gray-900 md:text-5xl"
           />
           <AnimatedText
             delay={0.4}
             stagger={0.03}
-            text="Saathi reads this before every consult, so you don’t repeat it on the call. Only the name is required. Everything stays in this browser."
+            text="doctor.ai reads this before every consult, so you don’t repeat it on the call. Only the name is required. Everything stays in this browser."
             className="mt-5 max-w-lg leading-relaxed text-gray-600"
           />
           {pending && (
@@ -77,7 +77,7 @@ export function Dashboard() {
             >
               <Sparkles className="mt-0.5 size-4 shrink-0" />
               <span>
-                We’ll add what you told Saathi, “{pending.slice(0, 80)}
+                We’ll add what you told doctor.ai, “{pending.slice(0, 80)}
                 {pending.length > 80 ? '…' : ''}”, to your notes.
               </span>
             </motion.p>
@@ -243,7 +243,7 @@ function IntakeCard({
         <AnimatedText
           delay={0.4}
           stagger={0.04}
-          text="Describe it once here. Saathi reads it before it says hello."
+          text="Describe it once here. doctor.ai reads it before it says hello."
           className="mt-4 text-gray-600"
         />
       </div>
@@ -388,7 +388,7 @@ function IntakeCard({
                   <p className="text-lg font-semibold">Get emergency care now.</p>
                   <p className="mt-1 leading-relaxed text-white/90">
                     Call your local emergency number or go to the nearest emergency department.
-                    Don’t wait for a consult with Saathi.
+                    Don’t wait for a consult with doctor.ai.
                   </p>
                 </div>
               </div>
@@ -399,7 +399,7 @@ function IntakeCard({
         <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-500">
             {ready
-              ? 'Saathi will read these notes before it says hello.'
+              ? 'doctor.ai will read these notes before it says hello.'
               : 'Describe the problem to continue.'}
           </p>
           <Link
@@ -415,7 +415,7 @@ function IntakeCard({
                 : 'bg-brand hover:bg-brand-2 text-white hover:-translate-y-0.5'
             )}
           >
-            {emergency ? 'Continue to Saathi anyway' : 'Continue to consult'}
+            {emergency ? 'Continue to doctor.ai anyway' : 'Continue to consult'}
             <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
@@ -502,7 +502,7 @@ function History({ consults }: { consults: Consult[] }) {
       <h2 className="font-display tracking-display-sm text-xl text-gray-900">Past consults</h2>
       {consults.length === 0 ? (
         <p className="mt-3 text-sm leading-relaxed text-gray-500">
-          None yet. Each time you hand off to Saathi, it’s listed here with its token number.
+          None yet. Each time you hand off to doctor.ai, it’s listed here with its token number.
         </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-3">

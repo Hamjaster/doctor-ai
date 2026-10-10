@@ -10,9 +10,9 @@ const inria = Inria_Serif({
 });
 
 export const metadata: Metadata = {
-  title: 'Saathi: a doctor on WhatsApp',
+  title: 'doctor.ai: a doctor on WhatsApp',
   description:
-    'Saathi is an AI doctor you can call on WhatsApp. Tell it what is wrong, show it on video, and leave knowing your next step.',
+    'doctor.ai is an AI doctor you can call on WhatsApp. Tell it what is wrong, show it on video, and leave knowing your next step.',
 };
 
 export const viewport: Viewport = {

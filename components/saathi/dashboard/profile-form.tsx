@@ -92,7 +92,7 @@ export function ProfileForm({
 
       <Field
         label="WhatsApp number"
-        hint="The number you will call Saathi from, with country code."
+        hint="The number you will call doctor.ai from, with country code."
       >
         {(id) => (
           <input
