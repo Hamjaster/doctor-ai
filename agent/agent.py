@@ -19,17 +19,33 @@ server = AgentServer()
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext) -> None:
+    # The web app sends the patient's intake as the `saathi.brief` participant attribute.
+    # Read it before starting so Saathi opens with the notes instead of asking again.
+    await ctx.connect()
+    patient = await ctx.wait_for_participant()
+    brief = patient.attributes.get("saathi.brief", "").strip()
+    instructions = INSTRUCTIONS
+    if brief:
+        instructions += (
+            "\n\nThe patient filled in these notes before the call. Use them, confirm the main"
+            " concern briefly, and don't ask for details they already gave:\n" + brief
+        )
+
     session = AgentSession(
         llm=google.realtime.RealtimeModel(model="gemini-3.8-live", voice="Puck"),
     )
     await session.start(
-        agent=Agent(instructions=INSTRUCTIONS),
+        agent=Agent(instructions=instructions),
         room=ctx.room,
         # Video input is off by default in LiveKit Agents; turn on the patient's camera feed.
         room_options=room_io.RoomOptions(video_input=True),
     )
     await session.generate_reply(
-        instructions="Greet the patient and ask what brings them in today."
+        instructions=(
+            "Greet the patient by name and check the concern from their notes."
+            if brief
+            else "Greet the patient and ask what brings them in today."
+        )
     )
 
 
