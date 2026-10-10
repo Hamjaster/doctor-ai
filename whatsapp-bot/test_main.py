@@ -64,7 +64,7 @@ def deliver(msg_id, text="hi", chat=USER, key="shh", event="message", **payload)
 
 
 def test_bot():
-    assert "Jamshed Khatri" in main.INSTRUCTIONS and "VIDEO_LINK" in main.INSTRUCTIONS
+    assert "AI Doctor" in main.INSTRUCTIONS and "Jamshed" not in main.INSTRUCTIONS and "VIDEO_LINK" in main.INSTRUCTIONS
     assert "https://video.example" not in main.INSTRUCTIONS  # links are per patient, added after
 
     # forged or missing signature: rejected, nothing processed
