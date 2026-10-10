@@ -99,8 +99,10 @@ async def entrypoint(ctx: JobContext) -> None:
     await session.generate_reply(
         instructions=(
             "Greet the patient by name, say you are doctor.ai, an AI doctor and not a "
-            "substitute for an in-person doctor. If their notes include a concern, briefly "
-            "confirm it; otherwise ask what brings them in today. Keep it to two sentences."
+            "substitute for an in-person doctor. If their notes include an earlier WhatsApp "
+            "chat, say you've read it and pick up from where it left off; if they include a "
+            "concern, briefly confirm it; otherwise ask what brings them in today. Keep it to "
+            "two sentences."
             if brief
             else "Greet the patient warmly, say you are doctor.ai, an AI doctor and not a "
             "substitute for an in-person doctor, then ask what brings them in today."

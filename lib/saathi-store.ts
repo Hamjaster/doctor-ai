@@ -31,6 +31,8 @@ export interface Intake {
   since: Since;
   severity: number | null;
   redFlags: string[];
+  /** The WhatsApp conversation, when the patient came from a video link in the chat. */
+  whatsapp?: string;
   ref: string;
   updatedAt: number;
 }

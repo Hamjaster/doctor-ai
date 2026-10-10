@@ -62,6 +62,10 @@ export function buildBrief(profile: Profile, intake?: Intake) {
   if (intake?.since) lines.push(`Started: ${SINCE_LABELS[intake.since]}`);
   if (intake?.severity) lines.push(`Severity: ${intake.severity}/10`);
   if (intake?.redFlags.length) lines.push(`Red flags reported: ${intake.redFlags.join('; ')}`);
+  if (intake?.whatsapp?.trim()) {
+    lines.push("Earlier on WhatsApp (pick up from here; don't ask again what they already said):");
+    lines.push(intake.whatsapp.trim());
+  }
   return lines.join('\n');
 }
 

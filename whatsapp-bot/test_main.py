@@ -10,6 +10,7 @@ import httpx
 os.environ.update(
     WAHA_API_KEY="waha-key", WAHA_HMAC_KEY="shh", OPENROUTER_API_KEY="or-key",
     OPENROUTER_MODEL="test/model", VIDEO_CALL_URL="https://video.example", DB_PATH=":memory:",
+    HANDOFF_SECRET="handoff-key",
 )
 import main  # noqa: E402  (reads the env at import)
 from fastapi.testclient import TestClient  # noqa: E402
@@ -22,6 +23,8 @@ fail_once = {"boom"}  # user texts the model fails on the first time it sees the
 
 
 def fake_api(request):
+    if request.method == "GET" and "/lids/" in str(request.url):  # WAHA mapping a private id to a number
+        return httpx.Response(200, json={"lid": "77@lid", "pn": "923001112222@c.us"})
     if request.method == "GET":  # WAHA serving a downloaded photo
         calls.append((str(request.url), request.headers.get("x-api-key"), None))
         return httpx.Response(200, content=b"img")
@@ -32,8 +35,10 @@ def fake_api(request):
         if isinstance(last, str) and last in fail_once:
             fail_once.discard(last)
             return httpx.Response(503, json={"error": "overloaded"})
-        return httpx.Response(200, json={"choices": [{"message": {"content": "re: " + (
-            last if isinstance(last, str) else last[0]["text"])}}]})
+        text = last if isinstance(last, str) else last[0]["text"]
+        if text == "need video":  # the model inviting the patient to a video consult
+            return httpx.Response(200, json={"choices": [{"message": {"content": "Video par dikhayein:\nVIDEO_LINK"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "re: " + text}}]})
     return httpx.Response(201, json={"id": "sent"})
 
 
@@ -49,7 +54,8 @@ def deliver(msg_id, text="hi", chat=USER, key="shh", event="message", **payload)
 
 
 def test_bot():
-    assert "Jamshed Khatri" in main.INSTRUCTIONS and "https://video.example" in main.INSTRUCTIONS
+    assert "Jamshed Khatri" in main.INSTRUCTIONS and "VIDEO_LINK" in main.INSTRUCTIONS
+    assert "https://video.example" not in main.INSTRUCTIONS  # links are per patient, added after
 
     # forged or missing signature: rejected, nothing processed
     assert deliver("m0", key="wrong").status_code == 403
@@ -121,6 +127,18 @@ def test_bot():
     assert main.db.execute("SELECT COUNT(*) FROM messages WHERE content = 'boom'").fetchone()[0] == 0
     deliver("b1", text="boom")
     assert calls[-1][2]["text"] == "re: boom"
+
+    # video invite: the placeholder becomes a personal link that hands this chat to the video consult
+    deliver("h1", text="need video", chat="77@lid", _data={"Info": {"PushName": "Ayesha"}})
+    sent = calls[-1][2]["text"]
+    assert "VIDEO_LINK" not in sent and "https://video.example/video?t=" in sent
+    token = sent.split("?t=")[1].split()[0]
+    assert client.get(f"/handoff/{token}").status_code == 403
+    assert client.get(f"/handoff/{token}", headers={"X-Handoff-Key": "wrong"}).status_code == 403
+    assert client.get("/handoff/nope", headers={"X-Handoff-Key": "handoff-key"}).status_code == 404
+    ctx = client.get(f"/handoff/{token}", headers={"X-Handoff-Key": "handoff-key"}).json()
+    assert ctx["name"] == "Ayesha" and ctx["phone"] == "+923001112222"
+    assert ctx["messages"] == [{"from": "patient", "text": "need video"}, {"from": "doctor", "text": sent}]
 
 
 if __name__ == "__main__":

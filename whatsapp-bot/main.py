@@ -5,11 +5,13 @@ import json
 import logging
 import os
 import re
+import secrets
 import sqlite3
+import time
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 
 WAHA_URL = os.getenv("WAHA_URL", "http://localhost:3001")  # host port in docker-compose.yml
 WAHA_API_KEY = os.environ["WAHA_API_KEY"]
@@ -20,6 +22,11 @@ OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_MODEL = os.environ["OPENROUTER_MODEL"]
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL_TIMEOUT_SECONDS = 60  # replies normally take 5-25 s; past this the patient should hear back anyway
+VIDEO_CALL_URL = os.environ["VIDEO_CALL_URL"].rstrip("/")
+# Shared with the web app, which reads a chat's context when a patient opens their video link.
+HANDOFF_SECRET = os.getenv("HANDOFF_SECRET", "")
+HANDOFF_TTL_SECONDS = 2 * 60 * 60
+VIDEO_LINK = "VIDEO_LINK"  # the model writes this; each reply gets a link for that patient
 SORRY = ("Sorry, I couldn't reply to that just now. Please send it again in a minute.\n"
          "Maazrat, abhi jawab nahi de saka. Thori dair baad dobara bhejein.")
 
@@ -31,8 +38,9 @@ doctor would. Then:
 - Minor issue: suggest simple home care, common over-the-counter options (used as the pack says)
   and what to avoid, and when to see a doctor if it doesn't get better.
 - Needs treatment: say which kind of doctor to see and how soon.
-- Serious, unclear from a photo, or needs a closer look: invite them to a live video consultation
-  at {os.environ["VIDEO_CALL_URL"]}
+- Serious, unclear from a photo, or needs a closer look: invite them to a live video consultation.
+  Put the exact text {VIDEO_LINK} on its own line where the link goes; it becomes their personal
+  link, and the video doctor will already have read this chat. Never write any other link.
 Keep replies short and conversational, like WhatsApp messages: usually under 100 words, a few
 questions or tips at a time. Format for WhatsApp: *single asterisks* for bold, _underscores_ for
 italics, "- " for bullet points and plain URLs; never use Markdown headings, **double asterisks**,
@@ -50,6 +58,8 @@ db = sqlite3.connect(os.getenv("DB_PATH", "bot.db"), check_same_thread=False, is
 db.executescript("""
     CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, sender TEXT, role TEXT, content TEXT);
     CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS patients (sender TEXT PRIMARY KEY, name TEXT);
+    CREATE TABLE IF NOT EXISTS handoffs (token TEXT PRIMARY KEY, sender TEXT, created REAL);
 """)
 
 
@@ -86,6 +96,11 @@ async def reply_to(msg):
     if db.execute("INSERT OR IGNORE INTO seen VALUES (?)", (msg["id"],)).rowcount == 0:
         return  # already handled this message id
 
+    name = ((msg.get("_data") or {}).get("Info") or {}).get("PushName") or (msg.get("_data") or {}).get("notifyName")
+    if name:
+        db.execute("INSERT INTO patients VALUES (?, ?) ON CONFLICT(sender) DO UPDATE SET name = excluded.name",
+                   (chat, name.strip()[:80]))
+
     text = content = msg.get("body") or ""
     if msg.get("hasMedia"):
         media = msg.get("media") or {}
@@ -115,7 +130,7 @@ async def reply_to(msg):
     )
     response = await call("POST", OPENROUTER_URL, headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
                           json={"model": OPENROUTER_MODEL, "messages": messages}, timeout=MODEL_TIMEOUT_SECONDS)
-    reply = whatsapp_format(response.json()["choices"][0]["message"]["content"])
+    reply = add_video_link(chat, whatsapp_format(response.json()["choices"][0]["message"]["content"]))
     await send(chat, reply)
 
     # Saved as a user/assistant pair only after a successful reply, so the window always starts on a user turn.
@@ -128,6 +143,49 @@ async def reply_to(msg):
         "(SELECT id FROM messages WHERE sender = ? ORDER BY id DESC LIMIT 10)",
         (chat, chat),
     )
+
+
+def add_video_link(chat, reply):
+    """Swap the model's placeholder (or a bare app URL) for this patient's video link."""
+    if VIDEO_LINK not in reply and VIDEO_CALL_URL not in reply:
+        return reply
+    token = secrets.token_urlsafe(12)
+    db.execute("INSERT INTO handoffs VALUES (?, ?, ?)", (token, chat, time.time()))
+    db.execute("DELETE FROM handoffs WHERE created < ?", (time.time() - HANDOFF_TTL_SECONDS,))
+    link = f"{VIDEO_CALL_URL}/video?t={token}"
+    reply = reply.replace(VIDEO_LINK, link)
+    return re.sub(re.escape(VIDEO_CALL_URL) + r"(?!/video\?t=)[^\s]*", link, reply)
+
+
+@app.get("/handoff/{token}")
+async def handoff(token: str, x_handoff_key: str = Header(default="")):
+    """Context for a video consult opened from WhatsApp. Only the web app's server calls this."""
+    if not HANDOFF_SECRET or not hmac.compare_digest(x_handoff_key.encode(), HANDOFF_SECRET.encode()):
+        raise HTTPException(403, "bad key")
+    row = db.execute("SELECT sender, created FROM handoffs WHERE token = ?", (token,)).fetchone()
+    if not row or row[1] < time.time() - HANDOFF_TTL_SECONDS:
+        raise HTTPException(404, "unknown or expired link")
+    sender = row[0]
+    name = (db.execute("SELECT name FROM patients WHERE sender = ?", (sender,)).fetchone() or [""])[0]
+    history = db.execute("SELECT role, content FROM messages WHERE sender = ? ORDER BY id", (sender,)).fetchall()
+    return {
+        "name": name,
+        "phone": await phone_number(sender),
+        "messages": [{"from": "patient" if r == "user" else "doctor", "text": c} for r, c in history],
+    }
+
+
+async def phone_number(chat):
+    """+92... for a chat id. WhatsApp's private @lid ids are looked up through WAHA."""
+    if chat.endswith("@c.us"):
+        return "+" + chat.split("@")[0]
+    try:
+        r = await call("GET", f"{WAHA_URL}/api/default/lids/{chat.split('@')[0]}",
+                       headers={"X-Api-Key": WAHA_API_KEY}, timeout=10)
+        pn = r.json().get("pn") or ""
+        return "+" + pn.split("@")[0] if pn else ""
+    except Exception:
+        return ""
 
 
 def whatsapp_format(text):
