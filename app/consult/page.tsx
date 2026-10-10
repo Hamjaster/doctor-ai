@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Handoff } from '@/components/saathi/consult/handoff';
 
-export const metadata: Metadata = { title: 'Call Saathi · Saathi' };
+export const metadata: Metadata = { title: 'Call doctor.ai · doctor.ai' };
 
 // Read env at request time so the number can change without a rebuild.
 export const dynamic = 'force-dynamic';

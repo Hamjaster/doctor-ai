@@ -8,7 +8,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import type { AvatarDrive, AvatarStageProps } from './types';
 
 /*
- * Saathi's doctor: Microsoft Rocketbox "Medical_Male_03" (MIT, see public/models/CREDITS.md),
+ * doctor.ai's doctor: Microsoft Rocketbox "Medical_Male_03" (MIT, see public/models/CREDITS.md),
  * a fully rigged character with ARKit + viseme blendshapes. Everything is procedural:
  *   - arms relax out of the bind T-pose; the right arm waves when he's clicked
  *   - head, neck and eyes follow the pointer anywhere on the page
@@ -217,7 +217,7 @@ function makeAIGear(neck: THREE.Vector3, chest: THREE.Vector3, sideX: number) {
     tip.position.copy(v(-0.08 * sideX + dx, -0.35, 0.165));
     g.add(tip);
   }
-  // Badge over the pocket: a lit card reading "Saathi · AI".
+  // Badge over the pocket: a lit card reading "doctor.ai / AI DOCTOR".
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 128;
@@ -230,8 +230,8 @@ function makeAIGear(neck: THREE.Vector3, chest: THREE.Vector3, sideX: number) {
   c.lineWidth = 6;
   c.stroke();
   c.fillStyle = GLOW;
-  c.font = '600 46px Helvetica Neue, Helvetica, Arial, sans-serif';
-  c.fillText('Saathi', 26, 62);
+  c.font = '600 40px Helvetica Neue, Helvetica, Arial, sans-serif';
+  c.fillText('doctor.ai', 24, 60, 208);
   c.font = '500 30px Helvetica Neue, Helvetica, Arial, sans-serif';
   c.globalAlpha = 0.8;
   c.fillText('AI DOCTOR', 26, 104);
@@ -290,7 +290,7 @@ function Doctor({
       for (const mat of mats) {
         const s = mat as THREE.MeshStandardMaterial;
         if (s.isMeshStandardMaterial) s.envMapIntensity = 0.8;
-        // The human head is replaced by Saathi's AI head.
+        // The human head is replaced by doctor.ai's AI head.
         if (/head|stetoskop|stethoscope/i.test(mat.name)) mat.visible = false;
       }
     });

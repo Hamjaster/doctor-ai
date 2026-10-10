@@ -1,4 +1,4 @@
-"""Saathi AI doctor: LiveKit agent using Gemini Live with camera input."""
+"""doctor.ai AI doctor: LiveKit agent using Gemini Live with camera input."""
 
 import logging
 from pathlib import Path
@@ -76,7 +76,7 @@ server = AgentServer()
 @server.rtc_session()
 async def entrypoint(ctx: JobContext) -> None:
     # The web app sends the patient's intake as the `saathi.brief` participant attribute.
-    # Read it before starting so Saathi opens with the notes instead of asking again.
+    # Read it before starting so doctor.ai opens with the notes instead of asking again.
     await ctx.connect()
     patient = await ctx.wait_for_participant()
     brief = patient.attributes.get("saathi.brief", "").strip()
@@ -98,11 +98,11 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     await session.generate_reply(
         instructions=(
-            "Greet the patient by name, say you are Saathi, an AI doctor and not a "
+            "Greet the patient by name, say you are doctor.ai, an AI doctor and not a "
             "substitute for an in-person doctor, then briefly confirm the concern from "
             "their notes."
             if brief
-            else "Greet the patient warmly, say you are Saathi, an AI doctor and not a "
+            else "Greet the patient warmly, say you are doctor.ai, an AI doctor and not a "
             "substitute for an in-person doctor, then ask what brings them in today."
         )
     )

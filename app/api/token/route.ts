@@ -18,7 +18,7 @@ const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
-// Only Saathi's own attributes are accepted from the browser, with a size cap.
+// Only doctor.ai's own attributes are accepted from the browser, with a size cap.
 const ATTRIBUTE_PREFIX = 'saathi.';
 const MAX_ATTRIBUTE_LENGTH = 4000;
 

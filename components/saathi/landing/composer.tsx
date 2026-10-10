@@ -24,7 +24,7 @@ const SUGGESTIONS = [
 ];
 
 /**
- * The hero's "tell Saathi" composer. What's typed is stashed and carried to the dashboard,
+ * The hero's "tell doctor.ai" composer. What's typed is stashed and carried to the dashboard,
  * where it becomes today's concern.
  */
 export function Composer({ delay = 0 }: { delay?: number }) {
@@ -82,7 +82,7 @@ export function Composer({ delay = 0 }: { delay?: number }) {
         )}
       >
         <label htmlFor={id} className="sr-only">
-          Tell Saathi what’s bothering you
+          Tell doctor.ai what’s bothering you
         </label>
         <div className="relative">
           <textarea
@@ -135,7 +135,7 @@ export function Composer({ delay = 0 }: { delay?: number }) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photo.url} alt="" className="size-10 rounded-lg object-cover" />
                 <p className="min-w-0 flex-1 text-xs leading-snug text-gray-600">
-                  Photo stays on this device. Show it to Saathi on a video consult.
+                  Photo stays on this device. Show it to doctor.ai on a video consult.
                 </p>
                 <button
                   type="button"
@@ -175,7 +175,7 @@ export function Composer({ delay = 0 }: { delay?: number }) {
           </div>
           <motion.button
             type="submit"
-            aria-label="Send to Saathi"
+            aria-label="Send to doctor.ai"
             disabled={!ready}
             animate={
               reduce

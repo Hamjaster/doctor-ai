@@ -29,7 +29,7 @@ export const RELATION_LABELS: Record<Relation, string> = {
   other: 'Someone else',
 };
 
-/** Symptoms that mean "get emergency care now", not "talk to Saathi". */
+/** Symptoms that mean "get emergency care now", not "talk to doctor.ai". */
 export const RED_FLAGS = [
   'Chest pain or pressure',
   'Trouble breathing',
@@ -44,7 +44,7 @@ export function firstName(name: string) {
 }
 
 /**
- * The brief Saathi receives before a consult. The same text is pre-filled into the WhatsApp
+ * The brief doctor.ai receives before a consult. The same text is pre-filled into the WhatsApp
  * message and sent to the video agent as the `saathi.brief` participant attribute, so both
  * channels start from identical notes.
  */
@@ -54,7 +54,7 @@ export function buildBrief(profile: Profile, intake: Intake) {
       ? profile.name
       : `${profile.name} (${RELATION_LABELS[profile.relation].replace('My ', 'my ')})`;
   const lines = [
-    `Saathi consult ${intake.ref || ''}`.trim(),
+    `doctor.ai consult ${intake.ref || ''}`.trim(),
     `Patient: ${who}${profile.age ? `, ${profile.age}` : ''}${profile.sex ? `, ${profile.sex}` : ''}`,
     `Concern: ${intake.concern.trim()}`,
   ];

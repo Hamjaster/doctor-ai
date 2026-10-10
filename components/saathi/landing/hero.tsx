@@ -12,17 +12,23 @@ const AvatarStage = dynamic(() => import('@/components/saathi/three/avatar-stage
   loading: () => null,
 });
 
-type Line = { who: 'Saathi' | 'Ayesha'; text: string };
+type Line = { who: 'doctor.ai' | 'Ayesha'; text: string };
 
 const SCRIPT: Line[] = [
-  { who: 'Saathi', text: 'Hi Ayesha, I’ve read your notes. The rash started three days ago?' },
+  { who: 'doctor.ai', text: 'Hi Ayesha, I’ve read your notes. The rash started three days ago?' },
   { who: 'Ayesha', text: 'Yes, and it itches more at night.' },
-  { who: 'Saathi', text: 'Hold your arm near a window so I can see it in daylight.' },
-  { who: 'Saathi', text: 'It looks like contact dermatitis. Did you change soap recently?' },
+  { who: 'doctor.ai', text: 'Hold your arm near a window so I can see it in daylight.' },
+  { who: 'doctor.ai', text: 'It looks like contact dermatitis. Did you change soap recently?' },
   { who: 'Ayesha', text: 'We did, last week.' },
-  { who: 'Saathi', text: 'If it blisters or spreads to your face, see a doctor in person today.' },
+  {
+    who: 'doctor.ai',
+    text: 'If it blisters or spreads to your face, see a doctor in person today.',
+  },
 ];
-const HELLO: Line = { who: 'Saathi', text: 'Hello! I’m Saathi. Tell me what’s bothering you.' };
+const HELLO: Line = {
+  who: 'doctor.ai',
+  text: 'Hello! I’m doctor.ai. Tell me what’s bothering you.',
+};
 
 export function Hero() {
   const reduce = useReducedMotion();
@@ -36,16 +42,16 @@ export function Hero() {
 
   const line = hello ? HELLO : SCRIPT[i];
 
-  // Saathi's lines move the mouth; the patient's lines make him listen.
+  // doctor.ai's lines move the mouth; the patient's lines make him listen.
   useEffect(() => {
     const d = drive.current;
-    d.mood = line.who === 'Saathi' ? 'speaking' : 'listening';
+    d.mood = line.who === 'doctor.ai' ? 'speaking' : 'listening';
     if (line.who === 'Ayesha') d.nodAt = performance.now() + 900;
     const t = setTimeout(
       () => {
         if (d.mood === 'speaking') d.mood = 'idle';
       },
-      line.who === 'Saathi' ? 2700 : 0
+      line.who === 'doctor.ai' ? 2700 : 0
     );
     return () => clearTimeout(t);
   }, [line]);
@@ -85,7 +91,7 @@ export function Hero() {
             className="font-display tracking-display text-4xl leading-[1.02] text-gray-900 md:text-6xl lg:text-7xl"
           />
           <AnimatedText
-            text="Tell Saathi what’s wrong. Get a clear next step in minutes."
+            text="Tell doctor.ai what’s wrong. Get a clear next step in minutes."
             delay={0.5}
             className="mt-5 max-w-lg text-lg text-gray-600 md:text-xl"
           />
@@ -100,7 +106,7 @@ export function Hero() {
             transition={{ duration: 0.8, delay: 1.7 }}
             className="mt-6 max-w-md text-xs leading-relaxed text-gray-500"
           >
-            Saathi is an AI, not a replacement for your doctor. In an emergency, call your local
+            doctor.ai is an AI, not a replacement for your doctor. In an emergency, call your local
             emergency number.
           </motion.p>
         </motion.div>
@@ -130,12 +136,12 @@ export function Hero() {
                 exit={reduce ? undefined : { opacity: 0, y: -8, filter: 'blur(6px)' }}
                 transition={{ duration: 0.45, ease: EASE_OUT }}
                 className={
-                  line.who === 'Saathi'
+                  line.who === 'doctor.ai'
                     ? 'font-display max-w-[30rem] text-center text-xl leading-snug text-gray-900 [text-shadow:0_0_18px_white,0_0_4px_white] md:text-2xl'
                     : 'max-w-[26rem] text-center text-base text-gray-500 italic [text-shadow:0_0_14px_white]'
                 }
               >
-                {line.who === 'Saathi' ? line.text : `“${line.text}”`}
+                {line.who === 'doctor.ai' ? line.text : `“${line.text}”`}
               </motion.p>
             </AnimatePresence>
           </div>
