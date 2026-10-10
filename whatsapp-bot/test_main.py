@@ -18,6 +18,7 @@ USER = "15550001111@c.us"
 OPENROUTER, SEND = "https://openrouter.ai/api/v1/chat/completions", "http://localhost:3001/api/sendText"
 SYSTEM = {"role": "system", "content": main.INSTRUCTIONS}
 calls = []  # (url, auth header, json body) for every outbound API call
+fail_once = {"boom"}  # user texts the model fails on the first time it sees them
 
 
 def fake_api(request):
@@ -28,6 +29,9 @@ def fake_api(request):
     calls.append((str(request.url), request.headers.get("authorization") or request.headers.get("x-api-key"), body))
     if request.url.host == "openrouter.ai":  # echo the latest user text
         last = body["messages"][-1]["content"]
+        if isinstance(last, str) and last in fail_once:
+            fail_once.discard(last)
+            return httpx.Response(503, json={"error": "overloaded"})
         return httpx.Response(200, json={"choices": [{"message": {"content": "re: " + (
             last if isinstance(last, str) else last[0]["text"])}}]})
     return httpx.Response(201, json={"id": "sent"})
@@ -108,6 +112,15 @@ def test_bot():
     assert len(sent) == 12 and sent[0] == SYSTEM and sent[1] == {"role": "user", "content": "q4"}
     assert sent[-1]["content"] == "q9"
     assert main.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 10
+
+    # model fails: the patient gets an apology, nothing is stored, and a redelivery is answered
+    before = len(calls)
+    deliver("b1", text="boom")
+    assert calls[before][0] == OPENROUTER and calls[before + 1][0] == SEND
+    assert calls[before + 1][2]["text"] == main.SORRY
+    assert main.db.execute("SELECT COUNT(*) FROM messages WHERE content = 'boom'").fetchone()[0] == 0
+    deliver("b1", text="boom")
+    assert calls[-1][2]["text"] == "re: boom"
 
 
 if __name__ == "__main__":

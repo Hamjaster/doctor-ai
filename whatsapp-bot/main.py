@@ -19,6 +19,9 @@ if not WAHA_HMAC_KEY:
 OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_MODEL = os.environ["OPENROUTER_MODEL"]
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL_TIMEOUT_SECONDS = 60  # replies normally take 5-25 s; past this the patient should hear back anyway
+SORRY = ("Sorry, I couldn't reply to that just now. Please send it again in a minute.\n"
+         "Maazrat, abhi jawab nahi de saka. Thori dair baad dobara bhejein.")
 
 INSTRUCTIONS = f"""You are Jamshed Khatri, a friendly AI doctor chatting with patients on WhatsApp.
 Patients describe their symptoms in messages or voice notes and can send photos. Ask about their
@@ -67,6 +70,12 @@ async def handle(msg):
         await reply_to(msg)
     except Exception:
         log.exception("failed to handle message %s", msg.get("id"))
+        # Forget the message so a redelivery gets answered, and tell the patient instead of going quiet.
+        db.execute("DELETE FROM seen WHERE id = ?", (msg.get("id"),))
+        try:
+            await send(msg["from"], SORRY)
+        except Exception:
+            log.exception("failed to send the apology for message %s", msg.get("id"))
 
 
 async def reply_to(msg):
@@ -105,7 +114,7 @@ async def reply_to(msg):
         + [{"role": "user", "content": content}]
     )
     response = await call("POST", OPENROUTER_URL, headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-                          json={"model": OPENROUTER_MODEL, "messages": messages})
+                          json={"model": OPENROUTER_MODEL, "messages": messages}, timeout=MODEL_TIMEOUT_SECONDS)
     reply = whatsapp_format(response.json()["choices"][0]["message"]["content"])
     await send(chat, reply)
 
@@ -133,8 +142,8 @@ async def send(chat, text):
                json={"session": "default", "chatId": chat, "text": text})
 
 
-async def call(method, url, **kwargs):
-    async with httpx.AsyncClient(timeout=120) as client:
+async def call(method, url, timeout=120, **kwargs):
+    async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.request(method, url, **kwargs)
     if r.is_error:
         raise RuntimeError(f"{method} {url} -> {r.status_code} {r.text}")
