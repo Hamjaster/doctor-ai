@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
-WAHA_URL = "http://localhost:3000"  # matches the port in docker-compose.yml
+WAHA_URL = os.getenv("WAHA_URL", "http://localhost:3001")  # host port in docker-compose.yml
 WAHA_API_KEY = os.environ["WAHA_API_KEY"]
 WAHA_HMAC_KEY = os.environ["WAHA_HMAC_KEY"].encode()
 if not WAHA_HMAC_KEY:

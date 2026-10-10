@@ -3,7 +3,7 @@ services:
   waha:
     image: devlikeapro/waha:${WAHA_TAG:-latest}
     ports:
-      - '127.0.0.1:3000:3000' # dashboard + API, reachable from this machine only
+      - '127.0.0.1:3001:3000' # dashboard + API on host port 3001 (the Next.js app uses 3000), reachable from this machine only
     volumes:
       - ./sessions:/app/.sessions # the WhatsApp login, so you only scan the QR code once
     extra_hosts:

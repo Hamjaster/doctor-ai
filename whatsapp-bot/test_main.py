@@ -15,7 +15,7 @@ import main  # noqa: E402  (reads the env at import)
 from fastapi.testclient import TestClient  # noqa: E402
 
 USER = "15550001111@c.us"
-OPENROUTER, SEND = "https://openrouter.ai/api/v1/chat/completions", "http://localhost:3000/api/sendText"
+OPENROUTER, SEND = "https://openrouter.ai/api/v1/chat/completions", "http://localhost:3001/api/sendText"
 SYSTEM = {"role": "system", "content": main.INSTRUCTIONS}
 calls = []  # (url, auth header, json body) for every outbound API call
 
@@ -69,7 +69,7 @@ def test_bot():
     # photo: fetched from our own WAHA (whatever host media.url names), sent to the model with its caption
     deliver("p1", text="rash on my arm", hasMedia=True,
             media={"url": "http://elsewhere.example/api/files/p1.jpg", "mimetype": "image/jpeg"})
-    assert calls[2] == ("http://localhost:3000/api/files/p1.jpg", "waha-key", None)
+    assert calls[2] == ("http://localhost:3001/api/files/p1.jpg", "waha-key", None)
     assert calls[3][2]["messages"][-1]["content"] == [
         {"type": "text", "text": "rash on my arm"},
         {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,aW1n"}},
@@ -81,7 +81,7 @@ def test_bot():
     # voice note: fetched the same way and sent to the model as audio
     deliver("v1", text="", hasMedia=True,
             media={"url": "http://localhost:3000/api/files/v1.oga", "mimetype": "audio/ogg; codecs=opus"})
-    assert calls[5] == ("http://localhost:3000/api/files/v1.oga", "waha-key", None)
+    assert calls[5] == ("http://localhost:3001/api/files/v1.oga", "waha-key", None)
     assert calls[6][2]["messages"][-1]["content"] == [
         {"type": "text", "text": "(voice note)"},
         {"type": "input_audio", "input_audio": {"data": "aW1n", "format": "ogg"}},

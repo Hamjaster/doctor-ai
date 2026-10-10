@@ -41,14 +41,14 @@ You need Python 3.9+ and Docker. Run everything from this folder.
 
    ```sh
    set -a; source .env; set +a
-   curl -s -X POST http://localhost:3000/api/sessions -H "X-Api-Key: $WAHA_API_KEY" \
+   curl -s -X POST http://localhost:3001/api/sessions -H "X-Api-Key: $WAHA_API_KEY" \
      -H "Content-Type: application/json" -d '{"name": "default", "start": true}'
    # wait about 5 seconds, then:
-   curl -s -X POST http://localhost:3000/api/default/auth/request-code -H "X-Api-Key: $WAHA_API_KEY" \
+   curl -s -X POST http://localhost:3001/api/default/auth/request-code -H "X-Api-Key: $WAHA_API_KEY" \
      -H "Content-Type: application/json" -d '{"phoneNumber": "923001234567"}'
    ```
 
-   On that phone, open WhatsApp → **Linked devices** → **Link a device** → **Link with phone number instead**, and enter the code. The `default` session should then show `WORKING` in the dashboard at http://localhost:3000/dashboard (user `admin`, password `WAHA_DASHBOARD_PASSWORD`).
+   On that phone, open WhatsApp → **Linked devices** → **Link a device** → **Link with phone number instead**, and enter the code. The `default` session should then show `WORKING` in the dashboard at http://localhost:3001/dashboard (user `admin`, password `WAHA_DASHBOARD_PASSWORD`).
 
 4. **Try it.** From another phone, send the number a message, a photo or a voice note. Messages sent while the session is still syncing after linking don't get a reply.
 
