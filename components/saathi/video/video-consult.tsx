@@ -138,6 +138,7 @@ function Stage({ profile, intake }: { profile: Profile; intake: Intake }) {
         tracks: { microphone: { enabled: true }, camera: { enabled: true } },
       });
       actions.logConsult(profile.id, 'video');
+      shareLocation(session.room);
       setPhase('live');
     } catch (e) {
       setError(
@@ -182,6 +183,24 @@ function Stage({ profile, intake }: { profile: Profile; intake: Intake }) {
     );
   }
   return <Live profile={profile} intake={intake} onEnd={end} />;
+}
+
+/**
+ * Share the patient's position so doctor.ai can find the hospitals nearest them in an
+ * emergency. The browser asks first; if they say no, the agent asks for their area instead.
+ */
+function shareLocation(room: ReturnType<typeof useSessionContext>['room']) {
+  if (!('geolocation' in navigator)) return;
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      const value = `${coords.latitude},${coords.longitude},${Math.round(coords.accuracy)}`;
+      room.localParticipant
+        .setAttributes({ 'saathi.location': value })
+        .catch((e) => console.warn('could not share location', e));
+    },
+    () => {},
+    { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 }
+  );
 }
 
 /* ───────────────────────── Lobby ───────────────────────── */
@@ -585,18 +604,25 @@ function LiveWords({ messages, speaking }: { messages: ReceivedMessage[]; speaki
   );
 }
 
-/** Sources doctor.ai looked up, shown briefly as a card instead of in a chat log. */
+/**
+ * Links doctor.ai posts during the call, shown as a card instead of in a chat log: the
+ * sources it looked up (hidden after a while) or nearby hospitals (kept until closed).
+ */
 function SourcesCard({ messages }: { messages: ReceivedMessage[] }) {
   const latest = messages.findLast(
     (m) => m.type === 'chatMessage' && !m.from?.isLocal && /\]\(https?:\/\//.test(m.message)
   );
   const [hidden, setHidden] = useState<string | null>(null);
 
+  // The message opens with a bold title, such as "**Hospitals near you:**".
+  const title = latest?.message.match(/^\*\*([^*]+?):?\*\*/)?.[1] ?? 'Sources';
+  const isHospitals = /hospital/i.test(title);
+
   useEffect(() => {
-    if (!latest) return;
+    if (!latest || isHospitals) return;
     const t = setTimeout(() => setHidden(latest.id), 30_000);
     return () => clearTimeout(t);
-  }, [latest]);
+  }, [latest, isHospitals]);
 
   const show = !!latest && hidden !== latest.id;
   return (
@@ -615,12 +641,12 @@ function SourcesCard({ messages }: { messages: ReceivedMessage[] }) {
         >
           <div className="mb-1 flex items-center justify-between gap-3">
             <span className="text-xs font-medium tracking-wide text-white/55 uppercase">
-              Sources
+              {isHospitals ? title : 'Sources'}
             </span>
             <button
               type="button"
               onClick={() => setHidden(latest.id)}
-              aria-label="Hide sources"
+              aria-label={isHospitals ? 'Hide hospitals' : 'Hide sources'}
               className="text-white/50 hover:text-white"
             >
               <X className="size-4" />

@@ -29,6 +29,13 @@ from livekit.plugins import deepgram, google, openai, silero
 load_dotenv()
 
 from medical_search import MedicalSearch, format_sources_markdown  # noqa: E402  needs GOOGLE_API_KEY
+from nearby_hospitals import (  # noqa: E402
+    describe_for_agent,
+    find_hospitals,
+    format_hospitals_markdown,
+    geocode,
+    parse_location,
+)
 
 logger = logging.getLogger("saathi")
 
@@ -128,6 +135,59 @@ class SaathiDoctor(Agent):
             f"Sources: {source_names}\n\n"
             "Explain this to the patient in your own words, mention which source it "
             "comes from by name, and tell them the links are in the chat."
+        )
+
+    @function_tool
+    async def find_nearby_hospitals(self, context: RunContext, area: str = "") -> str:
+        """Find the hospitals nearest the patient, with distance and directions.
+
+        Use this in an emergency, right after telling the patient to call for help, or
+        whenever the patient needs to go to a hospital and asks where. Uses the location
+        shared by the patient's browser.
+
+        Args:
+            area: Only if the patient's location isn't shared: the area and city they say
+                they're in, such as "Gulberg, Lahore". Leave empty otherwise.
+        """
+        room = get_job_context().room
+        shared = next(
+            (
+                p.attributes["saathi.location"]
+                for p in room.remote_participants.values()
+                if p.attributes.get("saathi.location")
+            ),
+            "",
+        )
+        point = parse_location(shared) if shared else None
+        near = "the patient's current location"
+        if point is None and area.strip():
+            point, near = await geocode(area), area.strip()
+        if point is None:
+            return (
+                "The patient's location isn't available. Ask them which area and city they're "
+                "in, then call this again with it. If it's an emergency, they should call 1122 "
+                "or their local emergency number now; don't wait for this."
+            )
+
+        result = await find_hospitals(*point, near=near)
+        logger.info("hospitals via %s: %d found", result.provider, len(result.hospitals))
+        if not result.hospitals:
+            return (
+                f"No hospitals were found near {near}. Tell the patient to call 1122 or their "
+                "local emergency number, who can send an ambulance or direct them."
+            )
+        try:
+            await room.local_participant.send_text(
+                format_hospitals_markdown(result), topic=CHAT_TOPIC
+            )
+        except Exception as e:
+            logger.warning("could not post hospitals to chat: %s", e)
+        return (
+            f"Hospitals near {near}, nearest first:\n{describe_for_agent(result)}\n\n"
+            "Tell the patient the nearest one or two by name and how far they are, and that "
+            "the list with directions is on their screen. In an emergency, keep it short and "
+            "remind them that calling 1122 or their local emergency number for an ambulance "
+            "comes first."
         )
 
 

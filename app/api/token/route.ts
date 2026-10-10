@@ -109,6 +109,8 @@ function createParticipantToken(
     canPublish: true,
     canPublishData: true,
     canSubscribe: true,
+    // The browser shares the patient's location as an attribute once the call has started.
+    canUpdateOwnMetadata: true,
   };
   at.addGrant(grant);
 
