@@ -38,7 +38,13 @@ You need Python 3.9+ and Docker. Run everything from this folder.
    uvicorn main:app --env-file .env --port 8000
    ```
 
-3. **Link the WhatsApp number with a pairing code.** In a second terminal, run the commands below. Replace the number with the bot's own WhatsApp number, digits only.
+3. **Link the WhatsApp number with a pairing code.** In a second terminal, run the script with the bot's own WhatsApp number, digits only. It prints a pairing code and gets a fresh one if a code expires before you enter it:
+
+   ```sh
+   ./link_whatsapp.sh 923001234567
+   ```
+
+   Or do it by hand:
 
    ```sh
    set -a; source .env; set +a
@@ -59,3 +65,4 @@ You need Python 3.9+ and Docker. Run everything from this folder.
 - **Who gets replies:** only one-on-one chats. Groups, status updates and channels are ignored. Videos and documents get a "text, photos or voice notes only" reply.
 - **Private data:** `sessions/` holds the WhatsApp login and `bot.db` holds patients' conversations. Both are gitignored; keep them private.
 - **Self-check:** `python test_main.py` runs the whole flow offline, with no network or keys.
+- **Chat in the terminal:** `.venv/bin/python chat_local.py` runs the bot's real reply code without WhatsApp or WAHA. It uses the keys in `.env` and keeps its own history in `chat_local.db`. Send files with `/photo path` or `/voice path`.
