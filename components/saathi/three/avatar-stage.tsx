@@ -9,12 +9,13 @@ import type { AvatarDrive, AvatarStageProps } from './types';
 
 /*
  * doctor.ai's doctor: Microsoft Rocketbox "Medical_Male_03" (MIT, see public/models/CREDITS.md),
- * a fully rigged character with ARKit + viseme blendshapes. Everything is procedural:
+ * a rigged human with his own face, stethoscope and viseme + ARKit blendshapes. All procedural:
+ *   - skin shaded with a physical material (sheen + a little clearcoat), portrait lighting
  *   - arms relax out of the bind T-pose; the right arm waves when he's clicked
- *   - head, neck and eyes follow the pointer anywhere on the page
- *   - real blinks, breathing, a smile on hover
- *   - lip-sync from a speech level (agent audio in a call, synthetic on the site)
- *   - listening tilt and a thinking pose; drag to spin him, he springs back
+ *   - head and neck follow the pointer; eyes follow it too, with small saccades of their own
+ *   - blinks (sometimes double), breathing, micro head motion, a soft resting smile
+ *   - lip-sync: a viseme sequencer driven by a speech level (agent audio, or synthetic)
+ *   - listening tilt, a thinking pose with hand to chin; drag to spin him, he springs back
  * Bones are posed with world-space rotations so the rig's local axes never matter.
  */
 
@@ -46,7 +47,7 @@ const _pqi = new THREE.Quaternion();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-const _id = new THREE.Quaternion();
+const _e = new THREE.Euler();
 
 /** Rotate a bone by a world-space rotation, keeping its children attached. */
 function rotateWorld(bone: THREE.Object3D, q: THREE.Quaternion) {
@@ -65,16 +66,25 @@ function aim(bone: THREE.Object3D, child: THREE.Object3D, dir: THREE.Vector3) {
   rotateWorld(bone, _q);
 }
 
+/** Parent `obj` to `bone` so that it sits at world position `p` (bone at its current pose). */
+function mountAt(bone: THREE.Object3D, obj: THREE.Object3D, p: THREE.Vector3) {
+  const want = new THREE.Matrix4().compose(p, new THREE.Quaternion(), new THREE.Vector3(1, 1, 1));
+  const local = bone.matrixWorld.clone().invert().multiply(want);
+  local.decompose(obj.position, obj.quaternion, obj.scale);
+  bone.add(obj);
+}
+
 type Rig = {
   bones: Record<string, THREE.Bone>;
   rest: Map<THREE.Bone, THREE.Quaternion>;
-  morphs: { mesh: THREE.Mesh; idx: [string, number][] }[];
+  /** Blendshape name → every (influences array, index) that carries it (body, head, stethoscope). */
+  morphs: Map<string, [number[], number][]>;
 };
 
 function buildRig(root: THREE.Object3D): Rig {
   const bones: Record<string, THREE.Bone> = {};
   const rest = new Map<THREE.Bone, THREE.Quaternion>();
-  const morphs: Rig['morphs'] = [];
+  const morphs: Rig['morphs'] = new Map();
   root.traverse((o) => {
     const b = o as THREE.Bone;
     if (b.isBone) {
@@ -82,169 +92,160 @@ function buildRig(root: THREE.Object3D): Rig {
       rest.set(b, b.quaternion.clone());
     }
     const m = o as THREE.Mesh;
-    if (m.isMesh && m.morphTargetDictionary) {
-      morphs.push({ mesh: m, idx: Object.entries(m.morphTargetDictionary) });
+    if (m.isMesh && m.morphTargetDictionary && m.morphTargetInfluences) {
+      for (const [k, i] of Object.entries(m.morphTargetDictionary)) {
+        const list = morphs.get(k) ?? [];
+        list.push([m.morphTargetInfluences, i]);
+        morphs.set(k, list);
+      }
     }
   });
   return { bones, rest, morphs };
 }
 
-function setMorph(rig: Rig, re: RegExp, v: number) {
-  for (const { mesh, idx } of rig.morphs) {
-    const inf = mesh.morphTargetInfluences;
-    if (!inf) continue;
-    for (const [k, i] of idx) if (re.test(k)) inf[i] = v;
+function setMorph(rig: Rig, name: string, v: number) {
+  const list = rig.morphs.get(name);
+  if (list) for (const [inf, i] of list) inf[i] = v;
+}
+
+/* ───────────── face ───────────── */
+
+/** Visemes the lip-sync cycles through: [blendshape, max weight, how often it's picked]. */
+const VISEMES: [string, number, number][] = [
+  ['AA_VI_10_aa', 0.8, 3],
+  ['AA_VI_11_E', 0.7, 2.4],
+  ['AA_VI_13_O', 0.6, 1.4],
+  ['AA_VI_14_U', 0.6, 0.9],
+  ['AA_VI_01_PP', 0.85, 1.1],
+  ['AA_VI_02_FF', 0.6, 0.9],
+  ['AA_VI_04_DD', 0.55, 1.4],
+  ['AA_VI_08_nn', 0.5, 1.1],
+  ['AA_VI_00_Sil', 0.4, 0.5],
+];
+const PP = VISEMES.findIndex(([n]) => n === 'AA_VI_01_PP');
+const VISEME_TOTAL = VISEMES.reduce((s, v) => s + v[2], 0);
+function pickViseme(not: number) {
+  for (;;) {
+    let r = Math.random() * VISEME_TOTAL;
+    let i = 0;
+    while (r > VISEMES[i][2]) r -= VISEMES[i++][2];
+    if (i !== not) return i;
   }
 }
 
-/* ───────────── the AI head ───────────── */
-
-const GLOW = '#9ef5e6';
-
-/** Ceramic shell, dark glass face screen, glowing eyes, waveform mouth, ear pods and a halo. */
-function makeAIHead() {
-  const g = new THREE.Group();
-  g.name = 'AIHead';
-  const shellMat = new THREE.MeshPhysicalMaterial({
-    color: '#f3f5f4',
-    roughness: 0.2,
-    clearcoat: 1,
-    clearcoatRoughness: 0.08,
-    sheen: 0.4,
-    sheenColor: new THREE.Color('#ffffff'),
+/** Skin that reads as skin: soft sheen for peach fuzz / scattering, a hint of moisture. */
+function makeSkin(src: THREE.MeshStandardMaterial) {
+  const skin = new THREE.MeshPhysicalMaterial({
+    name: src.name,
+    map: src.map,
+    normalMap: src.normalMap,
+    normalScale: src.normalScale.clone().multiplyScalar(0.8),
+    color: new THREE.Color('#f3eeee'),
+    roughness: 0.5,
+    metalness: 0,
+    sheen: 0.25,
+    sheenRoughness: 0.55,
+    sheenColor: new THREE.Color('#ffd9c8'),
+    clearcoat: 0.06,
+    clearcoatRoughness: 0.5,
+    envMapIntensity: 0.4,
   });
-  const glow = new THREE.MeshBasicMaterial({ color: GLOW, toneMapped: false });
-
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.115, 64, 48), shellMat);
-  shell.scale.set(0.9, 1.06, 0.98);
-  const visor = new THREE.Mesh(
-    new THREE.SphereGeometry(0.1, 64, 48),
-    new THREE.MeshPhysicalMaterial({
-      color: '#0c1615',
-      roughness: 0.05,
-      metalness: 0.3,
-      clearcoat: 1,
-    })
-  );
-  visor.scale.set(0.84, 0.64, 0.62);
-  visor.position.set(0, 0.004, 0.06);
-
-  const eyes = new THREE.Group();
-  eyes.position.set(0, 0.016, 0.119);
-  for (const x of [-0.029, 0.029]) {
-    const e = new THREE.Mesh(new THREE.CapsuleGeometry(0.0085, 0.012, 6, 16), glow);
-    e.position.x = x;
-    eyes.add(e);
-  }
-  const mouth = new THREE.Group();
-  mouth.position.set(0, -0.026, 0.117);
-  const bars: THREE.Mesh[] = [];
-  for (let i = 0; i < 7; i++) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.0042, 0.012, 0.002), glow);
-    b.position.x = (i - 3) * 0.0078;
-    mouth.add(b);
-    bars.push(b);
-  }
-  for (const sx of [-1, 1]) {
-    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.022, 40), shellMat);
-    pod.rotation.z = Math.PI / 2;
-    pod.position.set(sx * 0.1, 0, -0.005);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0024, 8, 48), glow);
-    ring.rotation.y = Math.PI / 2;
-    ring.position.set(sx * 0.112, 0, -0.005);
-    g.add(pod, ring);
-  }
-  const halo = new THREE.Mesh(
-    new THREE.TorusGeometry(0.155, 0.0016, 8, 120),
-    new THREE.MeshBasicMaterial({ color: GLOW, transparent: true, opacity: 0.5, toneMapped: false })
-  );
-  halo.rotation.x = Math.PI / 2 - 0.22;
-  halo.position.y = 0.035;
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.05, 0.12, 40),
-    new THREE.MeshPhysicalMaterial({ color: '#2B3534', roughness: 0.35, clearcoat: 0.6 })
-  );
-  neck.position.y = -0.135;
-  g.add(shell, visor, eyes, mouth, halo, neck);
-  return { g, eyes, bars, halo, glow };
+  // Teeth, gums and tongue share this texture (its lower-left corner). Nothing lights the
+  // inside of a mouth, so darken them and drop the sheen/coat there, or they glow grey-white.
+  skin.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        float mouthCavity = step(vMapUv.x, 0.215) * step(0.59, vMapUv.y);
+        diffuseColor.rgb *= 1.0 - 0.55 * mouthCavity;`
+      )
+      .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+        material.roughness = mix(material.roughness, 0.75, mouthCavity);
+        #ifdef USE_SHEEN
+          material.sheenColor *= 1.0 - mouthCavity;
+        #endif
+        #ifdef USE_CLEARCOAT
+          material.clearcoat *= 1.0 - mouthCavity;
+        #endif`
+      );
+  };
+  return skin;
 }
 
-/** Holographic stethoscope and an "AI" badge, built around the chest in world space. */
-function makeAIGear(neck: THREE.Vector3, chest: THREE.Vector3, sideX: number) {
-  const g = new THREE.Group();
-  g.name = 'AIGear';
-  const glow = new THREE.MeshBasicMaterial({
-    color: GLOW,
-    toneMapped: false,
-    transparent: true,
-    opacity: 0.9,
-  });
-  const v = (x: number, y: number, z: number) =>
-    new THREE.Vector3(neck.x + x, neck.y + y, neck.z + z);
-  // Drapes over the collar (outside the coat) and down both lapels.
-  const loop = new THREE.CatmullRomCurve3([
-    v(0.075 * sideX, -0.4, 0.16),
-    v(0.085 * sideX, -0.24, 0.155),
-    v(0.09 * sideX, -0.1, 0.12),
-    v(0.08 * sideX, -0.02, 0.05),
-    v(0.05 * sideX, 0.02, -0.03),
-    v(0, 0.035, -0.07),
-    v(-0.05 * sideX, 0.02, -0.03),
-    v(-0.08 * sideX, -0.02, 0.05),
-    v(-0.09 * sideX, -0.1, 0.12),
-    v(-0.085 * sideX, -0.24, 0.155),
-    v(-0.08 * sideX, -0.33, 0.16),
-  ]);
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(loop, 160, 0.0055, 10, false), glow));
-  // Chest piece: a glowing ring that pulses like a heartbeat.
-  const piece = new THREE.Group();
-  piece.position.copy(v(0.075 * sideX, -0.43, 0.165));
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.004, 12, 48), glow);
-  const core = new THREE.Mesh(
-    new THREE.CircleGeometry(0.022, 40),
-    new THREE.MeshBasicMaterial({
-      color: GLOW,
-      toneMapped: false,
-      transparent: true,
-      opacity: 0.35,
-    })
-  );
-  piece.add(ring, core);
-  g.add(piece);
-  // Ear tips on the other side.
-  for (const dx of [-0.012, 0.012]) {
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.008, 16, 12), glow);
-    tip.position.copy(v(-0.08 * sideX + dx, -0.35, 0.165));
-    g.add(tip);
-  }
-  // Badge over the pocket: a lit card reading "doctor.ai / AI DOCTOR".
+/** A plain white clinic ID card, matte. */
+function makeBadge() {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
-  canvas.height = 128;
+  canvas.height = 160;
   const c = canvas.getContext('2d')!;
-  c.fillStyle = '#0c1615';
-  c.beginPath();
-  c.roundRect(0, 0, 256, 128, 18);
-  c.fill();
-  c.strokeStyle = GLOW;
-  c.lineWidth = 6;
-  c.stroke();
-  c.fillStyle = GLOW;
-  c.font = '600 40px Helvetica Neue, Helvetica, Arial, sans-serif';
-  c.fillText('doctor.ai', 24, 60, 208);
-  c.font = '500 30px Helvetica Neue, Helvetica, Arial, sans-serif';
-  c.globalAlpha = 0.8;
-  c.fillText('AI DOCTOR', 26, 104);
+  c.fillStyle = '#f7f7f4';
+  c.fillRect(0, 0, 256, 160);
+  c.fillStyle = '#1f6f68';
+  c.fillRect(0, 0, 256, 34);
+  c.fillStyle = '#ffffff';
+  c.font = '600 22px Helvetica Neue, Helvetica, Arial, sans-serif';
+  c.fillText('doctor.ai', 16, 25);
+  c.fillStyle = '#c9d3d1';
+  c.fillRect(16, 50, 64, 80);
+  c.fillStyle = '#26302f';
+  c.font = '600 22px Helvetica Neue, Helvetica, Arial, sans-serif';
+  c.fillText('Physician', 94, 80, 150);
+  c.fillStyle = '#6b7473';
+  c.font = '500 17px Helvetica Neue, Helvetica, Arial, sans-serif';
+  c.fillText('General Practice', 94, 108, 150);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const badge = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.096, 0.05),
-    new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, transparent: true })
+    new THREE.PlaneGeometry(0.064, 0.04),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, metalness: 0 })
   );
-  badge.position.set(chest.x + 0.134 * sideX, chest.y - 0.056, chest.z + 0.168);
-  g.add(badge);
-  return { g, piece, glow };
+  badge.name = 'IDBadge';
+  return badge;
+}
+
+/** Tiny catchlights in front of each eyeball so the eyes read as wet. */
+function mountCatchlights(model: THREE.Object3D, B: Record<string, THREE.Bone>) {
+  let head: THREE.SkinnedMesh | null = null;
+  model.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (m.isSkinnedMesh && /head/i.test((m.material as THREE.Material).name)) head = m;
+  });
+  const mesh = head as THREE.SkinnedMesh | null;
+  if (!mesh) return;
+  const pos = mesh.geometry.attributes.position;
+  const si = mesh.geometry.attributes.skinIndex;
+  const sw = mesh.geometry.attributes.skinWeight;
+  const mat = new THREE.MeshBasicMaterial({
+    color: '#ffffff',
+    transparent: true,
+    opacity: 0.6,
+    toneMapped: false,
+  });
+  for (const side of ['L', 'R'] as const) {
+    const bone = B[`Bip01_${side}Eye`];
+    if (!bone) continue;
+    const bi = mesh.skeleton.bones.indexOf(bone);
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      for (let k = 0; k < 4; k++) {
+        if (si.getComponent(i, k) === bi && sw.getComponent(i, k) > 0.5) {
+          mesh.getVertexPosition(i, v);
+          box.expandByPoint(v.applyMatrix4(mesh.matrixWorld));
+        }
+      }
+    }
+    if (box.isEmpty()) continue;
+    // Front of the eyeball, nudged up and toward the key light (viewer's left).
+    const c = bone.getWorldPosition(new THREE.Vector3());
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.0016, 12, 8), mat);
+    dot.name = 'Catchlight';
+    mountAt(bone, dot, new THREE.Vector3(c.x - 0.0022, c.y + 0.0018, box.max.z + 0.0004));
+  }
 }
 
 /* ───────────── the character ───────────── */
@@ -285,22 +286,25 @@ function Doctor({
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       m.castShadow = true;
+      m.receiveShadow = true;
       m.frustumCulled = false;
-      const mats = Array.isArray(m.material) ? m.material : [m.material];
-      for (const mat of mats) {
-        const s = mat as THREE.MeshStandardMaterial;
-        if (s.isMeshStandardMaterial) s.envMapIntensity = 0.8;
-        // The human head is replaced by doctor.ai's AI head.
-        if (/head|stetoskop|stethoscope/i.test(mat.name)) mat.visible = false;
+      const src = m.material as THREE.MeshStandardMaterial;
+      if (!src.isMeshStandardMaterial) return;
+      if (/head/i.test(src.name)) {
+        m.material = makeSkin(src);
+      } else {
+        // Clone so the cached GLTF materials stay untouched.
+        const mat = src.clone();
+        mat.envMapIntensity = 0.7;
+        mat.roughness = /stetoskop/i.test(src.name) ? 0.45 : 0.75;
+        m.material = mat;
       }
     });
   }, [model]);
 
   useEffect(() => bindPointer(), []);
 
-  const ai = useMemo(() => makeAIHead(), []);
-  const attached = useRef(false);
-  const gear = useRef<ReturnType<typeof makeAIGear> | null>(null);
+  const mounted = useRef(false);
 
   const st = useRef({
     hover: 0,
@@ -308,7 +312,21 @@ function Doctor({
     level: 0,
     blinkNext: 1.2,
     blinkStart: -1,
+    blinkDouble: false,
+    sacNext: 1,
+    sac: new THREE.Vector2(),
+    gaze: new THREE.Vector2(),
     look: new THREE.Vector3(),
+    smile: 0.12,
+    browUp: 0,
+    browDown: 0,
+    squint: 0,
+    vCur: 0,
+    vPrev: 0,
+    vStart: 0,
+    vDur: 0.1,
+    vis: VISEMES.map(() => 0),
+    jaw: 0,
     spin: 0,
     dragging: false,
   });
@@ -324,33 +342,21 @@ function Doctor({
     rig.rest.forEach((q, b) => b.quaternion.copy(q));
     model.updateMatrixWorld(true);
 
-    // Mount the AI head on the head bone once, upright in world space at the bind pose.
-    if (!attached.current && B.Bip01_Head) {
-      const hb = B.Bip01_Head;
-      const p = new THREE.Vector3().setFromMatrixPosition(hb.matrixWorld);
-      const want = new THREE.Matrix4().compose(
-        p.add(new THREE.Vector3(0, 0.085, 0.012)),
-        new THREE.Quaternion(),
-        new THREE.Vector3(1, 1, 1)
-      );
-      const local = hb.matrixWorld.clone().invert().multiply(want);
-      local.decompose(ai.g.position, ai.g.quaternion, ai.g.scale);
-      hb.add(ai.g);
-      // Gear rides on the chest bone.
+    // Once, at the bind pose: catchlights on the eyes and an ID card on the coat.
+    if (!mounted.current && B.Bip01_Head) {
+      mountCatchlights(model, B);
       const chestBone = B.Bip01_Spine2 ?? B.Bip01_Spine1;
-      if (chestBone && B.Bip01_Neck && B.Bip01_L_UpperArm) {
-        const n = new THREE.Vector3().setFromMatrixPosition(B.Bip01_Neck.matrixWorld);
+      if (chestBone && B.Bip01_L_UpperArm) {
         const ch = new THREE.Vector3().setFromMatrixPosition(chestBone.matrixWorld);
         const lx = new THREE.Vector3().setFromMatrixPosition(B.Bip01_L_UpperArm.matrixWorld).x;
-        // Chest piece hangs on the viewer's right, like the original.
         const sideX = lx > ch.x ? 1 : -1;
-        const made = makeAIGear(n, ch, sideX);
-        const inv = chestBone.matrixWorld.clone().invert();
-        inv.decompose(made.g.position, made.g.quaternion, made.g.scale);
-        chestBone.add(made.g);
-        gear.current = made;
+        mountAt(
+          chestBone,
+          makeBadge(),
+          new THREE.Vector3(ch.x + 0.125 * sideX, ch.y - 0.045, ch.z + 0.152)
+        );
       }
-      attached.current = true;
+      mounted.current = true;
     }
 
     S.hover = damp(S.hover, S.hovered ? 1 : 0, 6, dt);
@@ -397,7 +403,8 @@ function Doctor({
       }
     }
 
-    // Head + neck follow the pointer, with listening tilt / thinking glance / speaking nods.
+    // Head + neck follow the pointer, with listening tilt / thinking glance / speaking nods,
+    // plus slow, small noise so he's never perfectly still.
     let yaw = pointer.x * 0.5;
     let pitch = -pointer.y * 0.28;
     let roll = 0;
@@ -405,80 +412,126 @@ function Doctor({
       yaw = 0.3;
       pitch = -0.22;
       roll = 0.07;
-    } else if (mood === 'listening') roll = 0.09;
-    pitch += Math.sin(t * 7) * L * 0.04;
+    } else if (mood === 'listening') roll = 0.08;
+    yaw += (Math.sin(t * 0.31) * 0.6 + Math.sin(t * 0.83 + 1.3) * 0.4) * 0.026;
+    pitch += (Math.sin(t * 0.43 + 2.1) * 0.6 + Math.sin(t * 1.07) * 0.4) * 0.02;
+    roll += Math.sin(t * 0.27 + 0.7) * 0.015;
+    pitch += Math.sin(t * 7) * L * 0.035;
     S.look.x = damp(S.look.x, pitch, 5, dt);
     S.look.y = damp(S.look.y, yaw, 5, dt);
     S.look.z = damp(S.look.z, roll, 4, dt);
     const lookQ = (w: number) =>
-      _q.setFromEuler(new THREE.Euler(-S.look.x * w, S.look.y * w, -S.look.z * w, 'YXZ'));
+      _q.setFromEuler(_e.set(-S.look.x * w, S.look.y * w, -S.look.z * w, 'YXZ'));
     if (B.Bip01_Neck) rotateWorld(B.Bip01_Neck, lookQ(0.35));
     if (B.Bip01_Head) rotateWorld(B.Bip01_Head, lookQ(0.65));
 
-    // Face.
+    // Blinks: quick close, slower open; one in five is a double blink.
     let blink = 0;
-    if (t > S.blinkNext && S.blinkStart < 0) S.blinkStart = t;
+    if (t > S.blinkNext && S.blinkStart < 0) {
+      S.blinkStart = t;
+      S.blinkDouble = Math.random() < 0.2;
+    }
     if (S.blinkStart >= 0) {
-      const p = (t - S.blinkStart) / 0.16;
-      blink = p >= 1 ? 0 : Math.sin(p * Math.PI);
-      if (p >= 1) {
+      const end = S.blinkDouble ? 0.42 : 0.17;
+      const bt = t - S.blinkStart;
+      const one = (x: number) =>
+        x < 0 || x > 0.17 ? 0 : x < 0.06 ? x / 0.06 : 1 - (x - 0.06) / 0.11;
+      blink = Math.max(one(bt), S.blinkDouble ? one(bt - 0.25) : 0);
+      if (bt >= end) {
         S.blinkStart = -1;
         S.blinkNext = t + 1.8 + Math.random() * 3.5;
       }
     }
-    setMorph(rig, /EyeBlink/, blink);
-    {
-      const gx0 = mood === 'thinking' ? 0.6 : pointer.x;
-      const gy0 = mood === 'thinking' ? 0.6 : pointer.y;
-      ai.eyes.scale.y = Math.max(0.12, 1 - blink) * (1 - S.hover * 0.35);
-      ai.eyes.position.x = damp(ai.eyes.position.x, gx0 * 0.012, 8, dt);
-      ai.eyes.position.y = damp(ai.eyes.position.y, 0.016 + gy0 * 0.008, 8, dt);
-      ai.bars.forEach((b, i) => {
-        const wave = Math.abs(Math.sin(t * 13 + i * 1.2)) * (1 - Math.abs(i - 3) / 4.5);
-        b.scale.y = damp(b.scale.y, 0.35 + L * 3.2 * wave + S.hover * 0.25, 20, dt);
-      });
-      ai.halo.rotation.z += dt * (0.35 + L * 1.5);
-      const k = 1 + L * 0.6 + S.hover * 0.25;
-      ai.glow.color.set(GLOW).multiplyScalar(k);
-      if (gear.current) {
-        const beat = (t * 1.2) % 1;
-        const pulse = Math.exp(-beat * 9) + 0.6 * Math.exp(-Math.abs(beat - 0.22) * 14);
-        gear.current.piece.scale.setScalar(1 + pulse * 0.18);
-        gear.current.glow.opacity = 0.7 + pulse * 0.3;
-      }
+    setMorph(rig, 'AK_09_EyeBlinkLeft', blink);
+    setMorph(rig, 'AK_10_EyeBlinkRight', blink);
+
+    // Gaze: follow the pointer, with small saccades the head doesn't follow.
+    if (t > S.sacNext) {
+      S.sac.set((Math.random() * 2 - 1) * 0.15, (Math.random() * 2 - 1) * 0.15);
+      S.sacNext = t + 1 + Math.random() * 2;
     }
-    setMorph(rig, /JawOpen/, L * 0.5);
-    setMorph(rig, /AA_VI_10_aa/, L * 0.5);
-    setMorph(rig, /AA_VI_13_O/, Math.max(0, Math.sin(t * 5.3)) * L * 0.35);
-    setMorph(rig, /MouthSmile/, 0.2 + S.hover * 0.45 + (up > 0 ? 0.3 : 0));
-    setMorph(
-      rig,
-      /Brow(InnerUp|OuterUp)/,
-      (mood === 'listening' ? 0.25 : 0) + L * 0.25 + S.hover * 0.2
-    );
-    setMorph(rig, /BrowDown/, think * 0.4);
-    const gx = mood === 'thinking' ? 0.6 : pointer.x;
-    const gy = mood === 'thinking' ? 0.6 : pointer.y;
-    setMorph(rig, /EyeLookUp/, Math.max(0, gy) * 0.6);
-    setMorph(rig, /EyeLookDown/, Math.max(0, -gy) * 0.6);
-    setMorph(rig, /EyeLookOutLeft|EyeLookInRight/, Math.max(0, gx) * 0.6);
-    setMorph(rig, /EyeLookInLeft|EyeLookOutRight/, Math.max(0, -gx) * 0.6);
+    const gx = (mood === 'thinking' ? 0.6 : pointer.x * 0.6) + S.sac.x;
+    const gy = (mood === 'thinking' ? 0.6 : pointer.y * 0.6) + S.sac.y;
+    S.gaze.x = damp(S.gaze.x, gx, 22, dt);
+    S.gaze.y = damp(S.gaze.y, gy, 22, dt);
+    const ex = S.gaze.x;
+    const ey = S.gaze.y;
+    setMorph(rig, 'AK_17_EyeLookUpLeft', Math.max(0, ey) * 0.5);
+    setMorph(rig, 'AK_18_EyeLookUpRight', Math.max(0, ey) * 0.5);
+    setMorph(rig, 'AK_11_EyeLookDownLeft', Math.max(0, -ey) * 0.5);
+    setMorph(rig, 'AK_12_EyeLookDownRight', Math.max(0, -ey) * 0.5);
+    setMorph(rig, 'AK_15_EyeLookOutLeft', Math.max(0, ex) * 0.5);
+    setMorph(rig, 'AK_14_EyeLookInRight', Math.max(0, ex) * 0.5);
+    setMorph(rig, 'AK_13_EyeLookInLeft', Math.max(0, -ex) * 0.5);
+    setMorph(rig, 'AK_16_EyeLookOutRight', Math.max(0, -ex) * 0.5);
+    for (const eye of [B.Bip01_LEye, B.Bip01_REye]) {
+      if (eye) rotateWorld(eye, _q.setFromEuler(_e.set(-ey * 0.08, ex * 0.1, 0, 'YXZ')));
+    }
+
+    // Expression baseline, always eased so nothing pops.
+    const listening = mood === 'listening';
+    S.smile = damp(S.smile, 0.12 + (listening || up > 0 ? 0.23 : 0) + S.hover * 0.15, 6, dt);
+    S.browUp = damp(S.browUp, (listening ? 0.1 : 0) + L * 0.12 + S.hover * 0.08, 8, dt);
+    S.browDown = damp(S.browDown, think * 0.3, 6, dt);
+    S.squint = damp(S.squint, think * 0.15 + S.smile * 0.25, 6, dt);
+    setMorph(rig, 'AK_44_MouthSmileLeft', S.smile);
+    setMorph(rig, 'AK_45_MouthSmileRight', S.smile);
+    setMorph(rig, 'AK_03_BrowInnerUp', S.browUp);
+    setMorph(rig, 'AK_04_BrowOuterUpLeft', S.browUp * 0.5);
+    setMorph(rig, 'AK_05_BrowOuterUpRight', S.browUp * 0.5);
+    setMorph(rig, 'AK_01_BrowDownLeft', S.browDown);
+    setMorph(rig, 'AK_02_BrowDownRight', S.browDown);
+    setMorph(rig, 'AK_19_EyeSquintLeft', S.squint + blink * 0.15);
+    setMorph(rig, 'AK_20_EyeSquintRight', S.squint + blink * 0.15);
+
+    // Lip-sync: step through visemes at 8–11 per second, crossfading ~75 ms between them.
+    const speaking = L > 0.04;
+    if (speaking && t >= S.vStart + S.vDur) {
+      S.vPrev = S.vCur;
+      S.vCur = pickViseme(S.vCur);
+      S.vStart = t;
+      S.vDur = 1 / (8 + Math.random() * 3);
+    }
+    const xf = Math.min(1, (t - S.vStart) / 0.075);
+    // Quiet speech still articulates; loud speech opens up.
+    const amp = speaking ? Math.min(1, 0.3 + L * 1.5) : 0;
+    VISEMES.forEach(([name, max], i) => {
+      let w = i === S.vCur ? xf : i === S.vPrev ? 1 - xf : 0;
+      // Lips always meet on PP, however quiet the speech.
+      w *= i === PP ? Math.min(1, 0.4 + amp) : amp;
+      S.vis[i] = damp(S.vis[i], speaking ? w * max : 0, speaking ? 30 : 20, dt);
+      setMorph(rig, name, Math.min(0.85, S.vis[i]));
+    });
+    S.jaw = damp(S.jaw, 0.45 * L * (1 - S.vis[PP] / 0.85), speaking ? 30 : 20, dt);
+    setMorph(rig, 'AK_25_JawOpen', S.jaw);
 
     // Drag-to-spin with spring back.
     if (!S.dragging) S.spin = damp(S.spin, 0, 3, dt);
     if (turn.current) turn.current.rotation.y = S.spin;
 
-    // Camera framing with a little parallax.
-    const headY = B.Bip01_Head ? B.Bip01_Head.getWorldPosition(_a).y : 1.6;
+    // Camera: eyes on the upper third, a touch of pointer parallax and a slow drift.
+    const pcam = camera as THREE.PerspectiveCamera;
+    if (pcam.fov !== 26) {
+      pcam.fov = 26;
+      pcam.updateProjectionMatrix();
+    }
+    const eye = B.Bip01_LEye ?? B.Bip01_Head;
+    const eyeY = eye ? eye.getWorldPosition(_a).y : 1.65;
     const aspect = size.width / Math.max(1, size.height);
-    // Hero: a chest-up close-up so he fills the frame. Call: head and shoulders.
-    const tgtY = framing === 'call' ? headY : headY - 0.28;
-    const dist = framing === 'call' ? 1.1 : aspect < 0.9 ? 2.3 : 2.05;
-    camera.position.x = damp(camera.position.x, pointer.x * 0.12, 2, dt);
-    camera.position.y = damp(camera.position.y, tgtY + 0.05 + pointer.y * 0.05, 2, dt);
-    camera.position.z = damp(camera.position.z, dist, 3, dt);
+    const call = framing === 'call';
+    const dist = call ? 1.15 : aspect < 0.9 ? 2.2 : 1.9;
+    const half = dist * Math.tan(THREE.MathUtils.degToRad(13));
+    const tgtY = eyeY - half / 3;
+    const drift = (t / 8) * Math.PI * 2;
+    camera.position.x = damp(camera.position.x, pointer.x * 0.05 + Math.sin(drift) * 0.01, 2, dt);
+    camera.position.y = damp(
+      camera.position.y,
+      eyeY - 0.02 + pointer.y * 0.02 + Math.cos(drift) * 0.006,
+      2,
+      dt
+    );
+    camera.position.z = damp(camera.position.z, dist + Math.sin(drift * 0.5) * 0.01, 3, dt);
     camera.lookAt(0, tgtY, 0);
-    void _id;
   });
 
   const drag = useRef<{ x: number; spin: number } | null>(null);
@@ -544,23 +597,45 @@ export default function AvatarStage({
         shadows
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
-        camera={{ position: [0, 1.2, 3.7], fov: 28 }}
+        onCreated={({ gl }) => {
+          gl.toneMappingExposure = 1.05;
+        }}
+        camera={{ position: [0, 1.6, 3], fov: 26 }}
         eventPrefix="client"
       >
-        <ambientLight intensity={0.85} />
+        {/* Portrait lighting: warm soft key upper-left, cool fill right, rim from behind. */}
+        <ambientLight intensity={0.15} color="#fff8f2" />
         <directionalLight
-          position={[-2.5, 4, 3.5]}
-          intensity={1.8}
-          color="#fff6ea"
+          position={[-2.2, 2.4, 2.2]}
+          intensity={3.2}
+          color="#fff0e2"
           castShadow
           shadow-mapSize={[1024, 1024]}
+          shadow-bias={-0.0004}
+          shadow-normalBias={0.02}
+          shadow-camera-left={-1}
+          shadow-camera-right={1}
+          shadow-camera-top={2.2}
+          shadow-camera-bottom={0}
         />
-        <directionalLight position={[3, 2, 2]} intensity={0.8} color="#e3ecff" />
-        <directionalLight position={[0, 3, -4]} intensity={1.6} color="#ffffff" />
+        <directionalLight position={[2.6, 1.4, 2]} intensity={0.3} color="#dfe8ff" />
+        <directionalLight position={[2, 1.5, -3]} intensity={0.5} color="#fff6ee" />
         <Environment resolution={256}>
-          <Lightformer intensity={2.2} position={[-3, 3, 3]} scale={[4, 4, 1]} color="#ffffff" />
-          <Lightformer intensity={0.9} position={[3, 1, 2]} scale={[3, 4, 1]} color="#e3eeff" />
-          <Lightformer intensity={1.4} position={[0, 3, -4]} scale={[6, 2, 1]} color="#ffffff" />
+          <Lightformer
+            intensity={2.2}
+            position={[-4, 2.2, 1.5]}
+            scale={[4, 4, 1]}
+            color="#ffe9d6"
+          />
+          <Lightformer intensity={0.25} position={[3, 1.5, 2]} scale={[3, 4, 1]} color="#dfe8ff" />
+          <Lightformer intensity={0.6} position={[0, 1.6, -4]} scale={[6, 2, 1]} color="#ffffff" />
+          <Lightformer
+            intensity={0.35}
+            position={[0, -2, 2]}
+            rotation-x={Math.PI / 2}
+            scale={[6, 3, 1]}
+            color="#f3e2d4"
+          />
         </Environment>
         <ModelBoundary>
           <Suspense fallback={null}>
