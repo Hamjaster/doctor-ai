@@ -7,3 +7,7 @@ pnpm-lock.yaml
 
 
 
+# HyperFrames video sources; formatting them can change how the films render
+motion/
+# Local Python environments (agent/, whatsapp-bot/)
+**/.venv/

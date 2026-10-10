@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -444,6 +444,35 @@ function Presence() {
   );
 }
 
+// Saathi posts its sources as Markdown links in the chat. Render those, and bare
+// http(s) URLs, as links; everything else stays plain text.
+const LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/g;
+
+function AgentText({ text }: { text: string }) {
+  const plain = text.replace(/\*\*(.+?)\*\*/g, '$1');
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of plain.matchAll(LINK_PATTERN)) {
+    const index = match.index ?? 0;
+    if (index > last) parts.push(plain.slice(last, index));
+    const href = match[2] ?? match[3];
+    parts.push(
+      <a
+        key={index}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline decoration-white/40 underline-offset-2 hover:decoration-white"
+      >
+        {match[1] ?? href}
+      </a>
+    );
+    last = index + match[0].length;
+  }
+  if (last < plain.length) parts.push(plain.slice(last));
+  return <span className="whitespace-pre-line text-white">{parts}</span>;
+}
+
 function Transcript({ patientName }: { patientName: string }) {
   const session = useSessionContext();
   const { messages, send, isSending } = useSessionMessages(session);
@@ -481,7 +510,11 @@ function Transcript({ patientName }: { patientName: string }) {
                     >
                       {mine ? patientName : 'Saathi'}
                     </span>
-                    <span className={mine ? 'text-white/70' : 'text-white'}>{m.message}</span>
+                    {mine ? (
+                      <span className="text-white/70">{m.message}</span>
+                    ) : (
+                      <AgentText text={m.message} />
+                    )}
                   </motion.li>
                 );
               })}
