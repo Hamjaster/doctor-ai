@@ -74,8 +74,9 @@ paracetamol, Brufen is ibuprofen), and explain in plain words what it is usually
 prescription or pack says, common side effects, and warnings that matter (pregnancy, children, kidney or
 liver problems, alcohol, drowsiness). Check it against other medicines in this chat, ask what else they
 take, and flag clashes and duplicates (two paracetamol brands, two painkillers). If a name is unreadable,
-say so and ask for a clearer photo; never guess. Never change a doctor's prescription: for changes, send
-them back to that doctor or a pharmacist."""
+say so and ask for a clearer photo; never guess. Explain only the medicines they show you: never suggest
+another medicine, a dose or what to take instead, even when one of theirs isn't safe for them. Say why it
+may not suit them and send them to a doctor or pharmacist to choose. Never change a doctor's prescription."""
 
 VOICE_REPLY = """This message is a voice note and your reply will be spoken aloud as a voice note. Reply in the
 language they spoke, written in that language's own script (Urdu in Urdu script, Pashto in Pashto script,
@@ -284,12 +285,19 @@ async def send_voice(chat, reply):
 
 async def speak(text):
     """Gemini text-to-speech: 24 kHz 16-bit mono PCM, wrapped as WAV."""
-    r = await call("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{TTS_MODEL}:generateContent",
-                   headers={"x-goog-api-key": GOOGLE_API_KEY}, timeout=MODEL_TIMEOUT_SECONDS,
-                   json={"contents": [{"parts": [{"text": f"Say warmly and calmly, like a kind doctor: {text}"}]}],
-                         "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {
-                             "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": TTS_VOICE}}}}})
-    pcm = base64.b64decode(r.json()["candidates"][0]["content"]["parts"][0]["inlineData"]["data"])
+    # The preview TTS model now and then returns a candidate with no audio; one retry usually gets it.
+    for attempt in range(2):
+        r = await call("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{TTS_MODEL}:generateContent",
+                       headers={"x-goog-api-key": GOOGLE_API_KEY}, timeout=MODEL_TIMEOUT_SECONDS,
+                       json={"contents": [{"parts": [{"text": f"Say warmly and calmly, like a kind doctor: {text}"}]}],
+                             "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {
+                                 "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": TTS_VOICE}}}}})
+        parts = (r.json().get("candidates") or [{}])[0].get("content", {}).get("parts") or [{}]
+        if "inlineData" in parts[0]:
+            break
+        if attempt:
+            raise RuntimeError(f"no audio from {TTS_MODEL}: {str(r.json())[:200]}")
+    pcm = base64.b64decode(parts[0]["inlineData"]["data"])
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
