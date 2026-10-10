@@ -26,6 +26,7 @@ You need Python 3.9+ and Docker. Run everything from this folder.
 
    In `.env`, fill in:
    - `OPENROUTER_API_KEY`: from https://openrouter.ai/keys
+   - `GOOGLE_API_KEY` (optional): a Gemini API key from https://aistudio.google.com/apikey. When OpenRouter fails or runs out of credits, the bot asks Gemini directly with it instead of sending the patient an apology
    - `VIDEO_CALL_URL`: where the video app is deployed
    - `WAHA_API_KEY`, `WAHA_HMAC_KEY` and `WAHA_DASHBOARD_PASSWORD`: three different random strings, e.g. from `openssl rand -hex 16`
    - `WAHA_TAG`: `latest` on Intel/AMD machines (the default, `arm`, is for Apple Silicon)

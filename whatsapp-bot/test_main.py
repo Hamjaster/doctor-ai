@@ -9,7 +9,7 @@ import httpx
 
 os.environ.update(
     WAHA_API_KEY="waha-key", WAHA_HMAC_KEY="shh", OPENROUTER_API_KEY="or-key",
-    OPENROUTER_MODEL="test/model", VIDEO_CALL_URL="https://video.example", DB_PATH=":memory:",
+    OPENROUTER_MODEL="test/model", OPENROUTER_FALLBACK_MODELS="test/backup", VIDEO_CALL_URL="https://video.example", DB_PATH=":memory:",
     HANDOFF_SECRET="handoff-key",
 )
 import main  # noqa: E402  (reads the env at import)
@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 USER = "15550001111@c.us"
 OPENROUTER, SEND = "https://openrouter.ai/api/v1/chat/completions", "http://localhost:3001/api/sendText"
+GEMINI = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 SYSTEM = {"role": "system", "content": main.INSTRUCTIONS}
 calls = []  # (url, auth header, json body) for every outbound API call
 fail_once = {"boom"}  # user texts the model fails on the first time it sees them
@@ -39,6 +40,8 @@ def fake_api(request):
         if text == "need video":  # the model inviting the patient to a video consult
             return httpx.Response(200, json={"choices": [{"message": {"content": "Video par dikhayein:\nVIDEO_LINK"}}]})
         return httpx.Response(200, json={"choices": [{"message": {"content": "re: " + text}}]})
+    if request.url.host == "generativelanguage.googleapis.com":
+        return httpx.Response(200, json={"choices": [{"message": {"content": "gemini: " + body["messages"][-1]["content"]}}]})
     return httpx.Response(201, json={"id": "sent"})
 
 
@@ -66,7 +69,8 @@ def test_bot():
     assert deliver("m1").status_code == 200
     assert deliver("m1").status_code == 200
     assert calls == [
-        (OPENROUTER, "Bearer or-key", {"model": "test/model", "messages": [SYSTEM, {"role": "user", "content": "hi"}]}),
+        (OPENROUTER, "Bearer or-key", {"model": "test/model", "models": ["test/model", "test/backup"],
+                                     "messages": [SYSTEM, {"role": "user", "content": "hi"}]}),
         (SEND, "waha-key", {"session": "default", "chatId": USER, "text": "re: hi"}),
     ]
 
@@ -127,6 +131,15 @@ def test_bot():
     assert main.db.execute("SELECT COUNT(*) FROM messages WHERE content = 'boom'").fetchone()[0] == 0
     deliver("b1", text="boom")
     assert calls[-1][2]["text"] == "re: boom"
+
+    # OpenRouter fails and a Google key is set: Gemini answers directly, with the same messages
+    main.GOOGLE_API_KEY, before = "g-key", len(calls)
+    fail_once.add("boom2")
+    deliver("b2", text="boom2")
+    assert [c[0] for c in calls[before:]] == [OPENROUTER, GEMINI, SEND]
+    assert calls[-2][1] == "Bearer g-key" and calls[-2][2]["messages"][-1]["content"] == "boom2"
+    assert calls[-1][2]["text"] == "gemini: boom2"
+    main.GOOGLE_API_KEY = ""
 
     # video invite: the placeholder becomes a personal link that hands this chat to the video consult
     deliver("h1", text="need video", chat="77@lid", _data={"Info": {"PushName": "Ayesha"}})

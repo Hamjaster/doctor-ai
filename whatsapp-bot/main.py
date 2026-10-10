@@ -21,6 +21,13 @@ if not WAHA_HMAC_KEY:
 OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_MODEL = os.environ["OPENROUTER_MODEL"]
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+# OpenRouter moves on to these when OPENROUTER_MODEL is down or rate limited. All read photos and voice notes.
+OPENROUTER_FALLBACK_MODELS = [m for m in os.getenv(
+    "OPENROUTER_FALLBACK_MODELS", "google/gemini-3.5-flash,google/gemini-2.5-flash").split(",") if m]
+# When OpenRouter itself fails (outage, out of credits), ask Gemini directly, billed to the Google key.
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 MODEL_TIMEOUT_SECONDS = 60  # replies normally take 5-25 s; past this the patient should hear back anyway
 VIDEO_CALL_URL = os.environ["VIDEO_CALL_URL"].rstrip("/")
 # Shared with the web app, which reads a chat's context when a patient opens their video link.
@@ -128,9 +135,7 @@ async def reply_to(msg):
         + [{"role": r, "content": c} for r, c in history]
         + [{"role": "user", "content": content}]
     )
-    response = await call("POST", OPENROUTER_URL, headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-                          json={"model": OPENROUTER_MODEL, "messages": messages}, timeout=MODEL_TIMEOUT_SECONDS)
-    reply = add_video_link(chat, whatsapp_format(response.json()["choices"][0]["message"]["content"]))
+    reply = add_video_link(chat, whatsapp_format(await ask_model(messages)))
     await send(chat, reply)
 
     # Saved as a user/assistant pair only after a successful reply, so the window always starts on a user turn.
@@ -143,6 +148,21 @@ async def reply_to(msg):
         "(SELECT id FROM messages WHERE sender = ? ORDER BY id DESC LIMIT 10)",
         (chat, chat),
     )
+
+
+async def ask_model(messages):
+    """The doctor's reply from OpenRouter, which tries the fallback models itself, or else from Gemini."""
+    try:
+        response = await call("POST", OPENROUTER_URL, headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+                              json={"model": OPENROUTER_MODEL, "models": [OPENROUTER_MODEL, *OPENROUTER_FALLBACK_MODELS],
+                                    "messages": messages}, timeout=MODEL_TIMEOUT_SECONDS)
+    except Exception:
+        if not GOOGLE_API_KEY:
+            raise
+        log.exception("OpenRouter failed, asking Gemini directly")
+        response = await call("POST", GEMINI_URL, headers={"Authorization": f"Bearer {GOOGLE_API_KEY}"},
+                              json={"model": GEMINI_MODEL, "messages": messages}, timeout=MODEL_TIMEOUT_SECONDS)
+    return response.json()["choices"][0]["message"]["content"]
 
 
 def add_video_link(chat, reply):
