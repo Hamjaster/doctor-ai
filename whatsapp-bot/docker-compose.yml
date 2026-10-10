@@ -1,0 +1,18 @@
+# WAHA: a free, self-hosted WhatsApp Web API (unofficial). Values come from .env in this folder.
+services:
+  waha:
+    image: devlikeapro/waha:${WAHA_TAG:-latest}
+    ports:
+      - '127.0.0.1:3000:3000' # dashboard + API, reachable from this machine only
+    volumes:
+      - ./sessions:/app/.sessions # the WhatsApp login, so you only scan the QR code once
+    extra_hosts:
+      - 'host.docker.internal:host-gateway' # lets the container reach the bot on Linux too
+    environment:
+      WHATSAPP_DEFAULT_ENGINE: GOWS # browser-free; the default WEBJS engine breaks when WhatsApp Web changes
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WAHA_DASHBOARD_USERNAME: admin
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD}
+      WHATSAPP_HOOK_URL: http://host.docker.internal:8000/webhook
+      WHATSAPP_HOOK_EVENTS: message
+      WHATSAPP_HOOK_HMAC_KEY: ${WAHA_HMAC_KEY}
